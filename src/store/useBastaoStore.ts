@@ -20,7 +20,7 @@ interface BastaoState {
   updateStatus: (nome: string, status: string, manterNaFila?: boolean, detalhe?: string) => void;
   toggleFila: (nome: string) => void;
   toggleTelefone: (nome: string) => void; toggleCafe: (nome: string) => void; toggleSkip: (nome: string) => void;
-  passarBastao: (equipe: "EPROC" | "JPE") => void; sairRapido: (nome: string) => void;
+  passarBastao: (equipe: "EPROC" | "JPE") => void;
   assumirLogmein: (alvo: string, ator: string) => void;
   liberarLogmein: (alvo: string, ator: string) => void;
   pedirLiberacaoLogmein: (deQuem: string, paraQuem: string) => void;
@@ -28,8 +28,6 @@ interface BastaoState {
   initRealtime: () => void;
   _saveToDb: (partialState: Partial<BastaoState>, acaoDesc: string) => void;
   _saveLogmeinToDb: (novoLogmein: LogmeinState) => void;
-  enviarRegistroN8n: (tipo: string, dados: any, mensagem: string) => Promise<boolean>;
-  salvarCertidaoSupabase: (dados: any) => Promise<boolean>;
 }
 
 const TEAM_ID = 2; const LOGMEIN_ID = 1; let realtimeConectado = false; 
@@ -49,7 +47,6 @@ export const useBastaoStore = create<BastaoState>((set, get) => ({
   },
 
   _saveLogmeinToDb: async (novoLogmein) => { set({ logmein: novoLogmein }); await supabase.from('app_state').upsert({ id: LOGMEIN_ID, data: novoLogmein }); },
-  enviarRegistroN8n: async () => { return true; }, salvarCertidaoSupabase: async () => { return true; },
 
   initRealtime: async () => {
     if (realtimeConectado) return; realtimeConectado = true;
@@ -65,11 +62,14 @@ export const useBastaoStore = create<BastaoState>((set, get) => ({
       if (resLogmein.data?.data) set({ logmein: { emUso: resLogmein.data.data.emUso || false, consultor: resLogmein.data.data.consultor || null, assumidoEm: resLogmein.data.data.assumidoEm || null, mensagens: resLogmein.data.data.mensagens || [] } });
     };
     await sincronizarComNuvem();
-    supabase.channel('painel-realtime').on('postgres_changes', { event: '*', schema: 'public', table: 'app_state' }, (p) => {
-        if (!p.new?.data) return; const novoDb = p.new.data;
+    
+    supabase.channel('painel-realtime').on('postgres_changes', { event: '*', schema: 'public', table: 'app_state' }, (p: any) => {
+        if (!p.new?.data) return; 
+        const novoDb = p.new.data;
         if (p.new.id === TEAM_ID) set({ filaEproc: novoDb.filaEproc || [], filaJpe: novoDb.filaJpe || [], statusTexto: novoDb.statusTexto || {}, statusDetalhe: novoDb.statusDetalhe || {}, skipFlags: novoDb.skipFlags || {}, quickIndicators: novoDb.quickIndicators || {}, ultimaAuditoria: novoDb.ultimaAuditoria || null });
         else if (p.new.id === LOGMEIN_ID) set({ logmein: { emUso: novoDb.emUso || false, consultor: novoDb.consultor || null, assumidoEm: novoDb.assumidoEm || null, mensagens: novoDb.mensagens || [] } });
-    }).subscribe(); setInterval(sincronizarComNuvem, 3500);
+    }).subscribe();
+    setInterval(sincronizarComNuvem, 3500);
   },
 
   adicionarMensagemMural: (texto, tipo, autor) => {
@@ -78,12 +78,10 @@ export const useBastaoStore = create<BastaoState>((set, get) => ({
     get()._saveLogmeinToDb({ ...state.logmein, mensagens: muralAtualizado });
   },
 
-  // 👇 AQUI ESTÃO OS TEXTOS EXATOS DO LOGMEIN
   assumirLogmein: (alvo, ator) => { 
     const state = get(); const agora = new Date().toISOString();
     get()._saveLogmeinToDb({ ...state.logmein, emUso: true, consultor: alvo, assumidoEm: agora }); 
-    const msg = alvo === ator ? `${ator} assumiu o LogMeIn.` : `${ator} assumiu o LogMeIn para ${alvo}.`; 
-    get().adicionarMensagemMural(msg, 'logmein', ator); 
+    get().adicionarMensagemMural(`${ator} assumiu o LogMeIn.`, 'logmein', ator); 
   },
   liberarLogmein: (alvo, ator) => { 
     const state = get(); let tempoExtra = '';
@@ -92,11 +90,10 @@ export const useBastaoStore = create<BastaoState>((set, get) => ({
         tempoExtra = ` (Tempo de uso: ${minutos} min)`;
     }
     get()._saveLogmeinToDb({ ...state.logmein, emUso: false, consultor: null, assumidoEm: null }); 
-    const msg = alvo === ator ? `${ator} liberou o LogMeIn.${tempoExtra}` : `${ator} liberou o LogMeIn de ${alvo}.${tempoExtra}`; 
-    get().adicionarMensagemMural(msg, 'logmein', ator); 
+    get().adicionarMensagemMural(`${ator} liberou o LogMeIn.${tempoExtra}`, 'logmein', ator); 
   },
   pedirLiberacaoLogmein: (deQuem, paraQuem) => { 
-    get().adicionarMensagemMural(`⚠️ ${deQuem} solicita a liberação do LogMeIn.`, 'logmein', deQuem); 
+    get().adicionarMensagemMural(`⚠️ ${deQuem} solicita a liberação do LogMeIn de ${paraQuem}.`, 'logmein', deQuem); 
   },
 
   updateStatus: (nome, status, manterNaFila = false, detalhe = '') => {
@@ -113,7 +110,7 @@ export const useBastaoStore = create<BastaoState>((set, get) => ({
         else newState.filaJpe = filaAtual.filter(n => n !== nome);
       }
     }
-    set(newState); get()._saveToDb(newState, `Alterou status de ${nome} para: ${status} ${detalhe ? `(${detalhe})` : ''}`);
+    set(newState); get()._saveToDb(newState, `Alterou status de ${nome} para: ${status}`);
   },
 
   toggleFila: (nome) => {
@@ -123,33 +120,23 @@ export const useBastaoStore = create<BastaoState>((set, get) => ({
     const novaFila = inQueue ? filaAtual.filter(n => n !== nome) : [...filaAtual, nome];
     const newState: Partial<BastaoState> = equipe === "EPROC" ? { filaEproc: novaFila } : { filaJpe: novaFila };
     newState.statusTexto = { ...state.statusTexto, [nome]: inQueue ? 'Indisponível' : '' };
-    newState.statusDetalhe = { ...state.statusDetalhe, [nome]: '' };
-    set(newState); get()._saveToDb(newState, inQueue ? `Removeu ${nome} da fila` : `Colocou ${nome} na fila`);
+    set(newState); get()._saveToDb(newState, inQueue ? `Removeu ${nome}` : `Colocou ${nome}`);
   },
 
-  toggleTelefone: (nome) => { const state = get(); const atual = state.quickIndicators[nome] || { telefone: false, cafe: false }; const newState = { quickIndicators: { ...state.quickIndicators, [nome]: { ...atual, telefone: !atual.telefone, cafe: false } } }; set(newState); get()._saveToDb(newState, `Marcou/Desmarcou Telefone de ${nome}`); },
-  toggleCafe: (nome) => { const state = get(); const atual = state.quickIndicators[nome] || { telefone: false, cafe: false }; const newState = { quickIndicators: { ...state.quickIndicators, [nome]: { ...atual, cafe: !atual.cafe, telefone: false } } }; set(newState); get()._saveToDb(newState, `Marcou/Desmarcou Café de ${nome}`); },
-  toggleSkip: (nome) => { const state = get(); const newState = { skipFlags: { ...state.skipFlags, [nome]: !state.skipFlags[nome] } }; set(newState); get()._saveToDb(newState, `Alterou Pular de ${nome}`); },
+  toggleTelefone: (nome) => { const state = get(); const atual = state.quickIndicators[nome] || { telefone: false, cafe: false }; const newState = { quickIndicators: { ...state.quickIndicators, [nome]: { ...atual, telefone: !atual.telefone, cafe: false } } }; set(newState); get()._saveToDb(newState, `Telefone ${nome}`); },
+  toggleCafe: (nome) => { const state = get(); const atual = state.quickIndicators[nome] || { telefone: false, cafe: false }; const newState = { quickIndicators: { ...state.quickIndicators, [nome]: { ...atual, cafe: !atual.cafe, telefone: false } } }; set(newState); get()._saveToDb(newState, `Café ${nome}`); },
+  toggleSkip: (nome) => { const state = get(); const newState = { skipFlags: { ...state.skipFlags, [nome]: !state.skipFlags[nome] } }; set(newState); get()._saveToDb(newState, `Pular ${nome}`); },
   
   passarBastao: (equipe) => {
     const state = get(); const filaOriginal = equipe === "EPROC" ? state.filaEproc : state.filaJpe;
     if (filaOriginal.length <= 1) return;
-    
     let novaFila = [...filaOriginal]; const responsavel = novaFila.shift()!; novaFila.push(responsavel);
     let novasSkips = { ...state.skipFlags };
     while (novaFila.length > 0 && novasSkips[novaFila[0]]) { const pulou = novaFila.shift()!; novasSkips[pulou] = false; novaFila.push(pulou); }
-    
     const newState: Partial<BastaoState> = equipe === "EPROC" ? { filaEproc: novaFila, skipFlags: novasSkips } : { filaJpe: novaFila, skipFlags: novasSkips };
-    set(newState); get()._saveToDb(newState, `Passou o bastão da fila ${equipe}`);
-
-    try {
-      const payload = {
-        evento: "bastao_giro", timestamp: new Date().toISOString(), team_id: equipe === "EPROC" ? 2 : 1, team_name: equipe === "EPROC" ? "Eproc" : "Legados",
-        com_bastao_agora: novaFila[0] || "Ninguém", proximos: novaFila.slice(1)
-      };
-      fetch("https://matheusgomes12.app.n8n.cloud/webhook/b0fe5e6a-7586-4d95-8472-463d84237c09", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }).catch(() => {});
-    } catch(err) {}
-  },
-
-  sairRapido: (nome) => { }
+    set(newState); get()._saveToDb(newState, `Passou bastão ${equipe}`);
+    
+    const payload = { evento: "bastao_giro", team_name: equipe === "EPROC" ? "Eproc" : "Legados", com_bastao_agora: novaFila[0], proximos: novaFila.slice(1) };
+    fetch("https://matheusgomes12.app.n8n.cloud/webhook/b0fe5e6a-7586-4d95-8472-463d84237c09", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }).catch(() => {});
+  }
 }))
