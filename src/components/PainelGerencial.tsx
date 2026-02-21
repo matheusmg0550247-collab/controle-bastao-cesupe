@@ -1,0 +1,378 @@
+import { useState, useEffect } from 'react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
+import { supabase } from '../lib/supabase';
+
+export function PainelGerencial() {
+  const [abaAtiva, setAbaAtiva] = useState('Ranking');
+  const [loading, setLoading] = useState(false);
+
+  const [dadosSemanal, setDadosSemanal] = useState<any[]>([]);
+  const [dadosHe, setDadosHe] = useState<any[]>([]);
+  const [listaHe, setListaHe] = useState<any[]>([]);
+  const [certidoes, setCertidoes] = useState<any[]>([]);
+  const [dadosRanking, setDadosRanking] = useState<any[]>([]);
+  const [dadosDiario, setDadosDiario] = useState<any[]>([]);
+
+  // Estados de Certidões
+  const [filtroTipo, setFiltroTipo] = useState('Todos');
+  const [buscaCertidao, setBuscaCertidao] = useState('');
+  const [certidaoExpandida, setCertidaoExpandida] = useState<any>(null); // O modal da certidão
+
+  useEffect(() => {
+    if (abaAtiva === 'Ranking' && dadosRanking.length === 0) fetchRanking();
+    if (abaAtiva === 'Diário' && dadosDiario.length === 0) fetchDiario();
+    if (abaAtiva === 'Semanal' && dadosSemanal.length === 0) fetchSemanal();
+    if (abaAtiva === 'H. Extras' && dadosHe.length === 0) fetchHorasExtras();
+    if (abaAtiva === 'Certidões' && certidoes.length === 0) fetchCertidoes();
+  }, [abaAtiva]);
+
+  const fetchRanking = async () => { /* ... código mantido ... */ 
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.from('app_state').select('data').in('id', [1, 2]);
+      if (!error && data) {
+        const hoje = new Date().toISOString().split('T')[0];
+        let counts: Record<string, number> = {};
+        data.forEach(row => {
+          const logs = row.data?.daily_logs || [];
+          logs.forEach((log: any) => {
+            const logDate = log.timestamp ? log.timestamp.split('T')[0] : '';
+            if (logDate === hoje) {
+               const novoStatus = log.new_status || '';
+               if (novoStatus.includes('Bastão') && !novoStatus.includes('Fila')) {
+                  counts[log.consultor] = (counts[log.consultor] || 0) + 1;
+               }
+            }
+          });
+        });
+        const rankingArr = Object.keys(counts).map(k => ({ nome: k, bastoes: counts[k] })).sort((a, b) => b.bastoes - a.bastoes).slice(0, 10);
+        setDadosRanking(rankingArr);
+      }
+    } catch(err) { console.error(err); }
+    setLoading(false);
+  };
+
+  const fetchDiario = async () => { /* ... código mantido ... */
+    setLoading(true);
+    try {
+      const seteDiasAtras = new Date();
+      seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
+      const strDate = seteDiasAtras.toISOString().split('T')[0];
+      const { data, error } = await supabase.from('daily_logs').select('date, consultor, payload').eq('source', 'consolidado').gte('date', strDate).order('date', { ascending: false });
+      if (!error && data && data.length > 0) {
+        const uniqueDates = Array.from(new Set(data.map(d => d.date))).sort().reverse();
+        const dataAtual = uniqueDates[0];
+        const dadosHoje = data.filter(d => d.date === dataAtual).map(d => {
+           const atend = d.payload?.atendimentos || {};
+           const total = (parseInt(atend.chat) || 0) + (parseInt(atend.bastao) || 0) + (parseInt(atend.hp) || 0);
+           return { nome: d.consultor, total: total };
+        }).filter(d => d.total > 0).sort((a, b) => b.total - a.total).slice(0, 15);
+        setDadosDiario(dadosHoje);
+      }
+    } catch(err) { console.error(err); }
+    setLoading(false);
+  };
+
+  const fetchSemanal = async () => { /* ... código mantido ... */
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.from('atendimentos_resumo').select('*').eq('id', 2).single();
+      if (!error && data?.data?.totais_por_relatorio) setDadosSemanal(data.data.totais_por_relatorio);
+    } catch (err) { console.error(err); }
+    setLoading(false);
+  };
+
+  const fetchHorasExtras = async () => { /* ... código mantido ... */
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.from('horas_extras').select('*').order('data', { ascending: false }).limit(500);
+      if (!error && data) {
+        setListaHe(data);
+        const agrupado = data.reduce((acc: any, curr: any) => {
+          if (!curr.data) return acc;
+          const mesAno = curr.data.substring(0, 7);
+          let minutos = 0;
+          const tempoStr = curr.tempo_total || '';
+          const matchH = tempoStr.match(/(\d+)h/i);
+          const matchM = tempoStr.match(/(\d+)m/i);
+          if (matchH) minutos += parseInt(matchH[1]) * 60;
+          if (matchM) minutos += parseInt(matchM[1]);
+          if (!matchH && !matchM && !isNaN(parseInt(tempoStr))) minutos += parseInt(tempoStr);
+          if (!acc[mesAno]) acc[mesAno] = { mes: mesAno, horas: 0 };
+          acc[mesAno].horas += (minutos / 60);
+          return acc;
+        }, {});
+        setDadosHe(Object.values(agrupado).sort((a: any, b: any) => a.mes.localeCompare(b.mes)));
+      }
+    } catch (err) { console.error(err); }
+    setLoading(false);
+  };
+
+  // 👇 MÁGICA DA CERTIDÃO: Puxa 1000 registros para o filtro varrer tudo!
+  const fetchCertidoes = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.from('certidoes_registro').select('*').order('data', { ascending: false }).limit(1000);
+      if (!error && data) setCertidoes(data);
+    } catch (err) { console.error(err); }
+    setLoading(false);
+  };
+
+  // NORMALIZAÇÃO DE TEXTO IGUAL AO STREAMLIT
+  const normalizarTipo = (tipoBruto: string) => {
+     if (!tipoBruto) return 'Geral';
+     const t = tipoBruto.toLowerCase();
+     if (t.includes('eletr')) return 'Eletrônica';
+     if (t.includes('fís') || t.includes('fis')) return 'Física';
+     return 'Geral';
+  };
+
+  const certidoesFiltradas = certidoes.filter(c => {
+     const tipoNorm = normalizarTipo(c.tipo);
+     const matchTipo = filtroTipo === 'Todos' || tipoNorm === filtroTipo;
+     
+     const term = buscaCertidao.toLowerCase();
+     const matchBusca = term === '' ||
+        (c.processo && c.processo.toLowerCase().includes(term)) ||
+        (c.incidente && c.incidente.toLowerCase().includes(term)) ||
+        (c.nome_parte && c.nome_parte.toLowerCase().includes(term)) ||
+        (c.consultor && c.consultor.toLowerCase().includes(term));
+     
+     return matchTipo && matchBusca;
+  });
+
+  return (
+    <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 w-full mt-6 relative">
+      <div className="flex flex-col md:flex-row justify-between items-center border-b pb-4 mb-6 gap-4">
+        <h2 className="text-2xl font-black text-indigo-900 flex items-center gap-2">📊 Dashboard Gerencial</h2>
+        <div className="flex flex-wrap gap-2 bg-gray-100 p-1 rounded-xl">
+          {['Ranking', 'Diário', 'Semanal', 'H. Extras', 'Certidões'].map(aba => (
+            <button key={aba} onClick={() => setAbaAtiva(aba)} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${abaAtiva === aba ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-800'}`}>
+              {aba}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="min-h-[400px] w-full bg-gray-50 rounded-xl border border-gray-200 p-6">
+        {loading && <p className="text-center font-bold text-gray-500 mt-10 animate-pulse">Consultando o Supabase...</p>}
+
+        {!loading && abaAtiva === 'Ranking' && (
+          <div className="w-full h-[400px]">
+            <h3 className="text-gray-500 font-bold mb-4 text-center uppercase tracking-wider">Top Bastões Hoje</h3>
+            {dadosRanking.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={dadosRanking}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="nome" tick={{ fill: '#6b7280', fontWeight: 'bold' }} />
+                  <YAxis />
+                  <Tooltip cursor={{fill: '#f3f4f6'}} contentStyle={{ borderRadius: '10px', fontWeight: 'bold' }}/>
+                  <Bar dataKey="bastoes" fill="#D4AF37" radius={[6, 6, 0, 0]} name="Bastões Assumidos" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : <p className="text-center text-gray-400 mt-20">Nenhum bastão assumido hoje ainda.</p>}
+          </div>
+        )}
+
+        {!loading && abaAtiva === 'Diário' && (
+          <div className="w-full h-[400px]">
+             <h3 className="text-gray-500 font-bold mb-4 text-center uppercase tracking-wider">Produção de Hoje (Consolidado)</h3>
+             {dadosDiario.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={dadosDiario}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="nome" tick={{ fill: '#6b7280', fontWeight: 'bold' }} />
+                    <YAxis />
+                    <Tooltip cursor={{fill: '#f3f4f6'}} contentStyle={{ borderRadius: '10px', fontWeight: 'bold' }}/>
+                    <Bar dataKey="total" fill="#10b981" radius={[6, 6, 0, 0]} name="Total de Atendimentos" />
+                  </BarChart>
+                </ResponsiveContainer>
+             ) : <p className="text-center text-gray-400 mt-20">Nenhum dado consolidado de hoje encontrado.</p>}
+          </div>
+        )}
+
+        {!loading && abaAtiva === 'Semanal' && (
+          <div className="w-full h-[400px]">
+            <h3 className="text-gray-500 font-bold mb-4 text-center uppercase tracking-wider">Atendimentos Semanais</h3>
+            {dadosSemanal.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={dadosSemanal}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="relatorio" tick={{ fill: '#6b7280', fontWeight: 'bold' }} />
+                  <YAxis />
+                  <Tooltip cursor={{fill: '#f3f4f6'}} contentStyle={{ borderRadius: '10px', fontWeight: 'bold' }}/>
+                  <Legend wrapperStyle={{ fontWeight: 'bold', paddingTop: '10px' }} />
+                  <Bar dataKey="Eproc" fill="#f97316" radius={[4, 4, 0, 0]} name="Equipe Eproc" />
+                  <Bar dataKey="Legados" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Equipe Legados" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : <p className="text-center text-gray-400 mt-20">Nenhum dado semanal encontrado.</p>}
+          </div>
+        )}
+
+        {!loading && abaAtiva === 'H. Extras' && (
+          <div className="w-full flex flex-col gap-6">
+            <div className="h-[300px] w-full">
+              <h3 className="text-gray-500 font-bold mb-4 text-center uppercase tracking-wider">Evolução de Horas Extras (Em Horas)</h3>
+              {dadosHe.length > 0 && (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={dadosHe}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="mes" tick={{ fill: '#6b7280', fontWeight: 'bold' }} />
+                    <YAxis />
+                    <Tooltip formatter={(value: number) => value.toFixed(1) + 'h'} cursor={{fill: '#f3f4f6'}} contentStyle={{ borderRadius: '10px', fontWeight: 'bold' }}/>
+                    <Bar dataKey="horas" fill="#8b5cf6" radius={[6, 6, 0, 0]} name="Total de Horas" />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            {listaHe.length > 0 && (
+              <div>
+                <h3 className="text-gray-500 font-bold mb-4 uppercase tracking-wider border-t border-gray-200 pt-6">Últimos Registros Detalhados</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-4 max-h-[300px] overflow-y-auto pr-2">
+                  {listaHe.slice(0, 20).map((he, idx) => (
+                    <div key={idx} className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col gap-2">
+                      <div className="flex justify-between items-center border-b pb-2">
+                        <span className="font-bold text-gray-800">{he.consultor}</span>
+                        <span className="text-xs font-black bg-purple-100 text-purple-700 px-2 py-1 rounded-md">{he.tempo_total}</span>
+                      </div>
+                      <span className="text-xs text-gray-400 font-bold">{new Date(he.data).toLocaleDateString('pt-BR')}</span>
+                      <p className="text-sm text-gray-600 line-clamp-2" title={he.motivo}>{he.motivo || 'Sem motivo informado.'}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ================= ABA: CERTIDÕES ================= */}
+        {!loading && abaAtiva === 'Certidões' && (
+          <div className="w-full">
+            <h3 className="text-gray-500 font-bold mb-4 uppercase tracking-wider">Controle de Certidões</h3>
+            
+            <div className="flex flex-col md:flex-row gap-4 mb-6 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+              <div className="flex-1">
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Buscar (Processo, Chamado, Nome)</label>
+                <input 
+                  type="text" value={buscaCertidao} onChange={(e) => setBuscaCertidao(e.target.value)} 
+                  placeholder="Digite para filtrar em todo o histórico..." 
+                  className="w-full border-2 border-gray-200 rounded-lg p-2 outline-none focus:border-indigo-500 text-sm font-bold text-gray-700"
+                />
+              </div>
+              <div className="w-full md:w-64">
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Filtrar por Tipo</label>
+                <select 
+                  value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)}
+                  className="w-full border-2 border-gray-200 rounded-lg p-2 outline-none focus:border-indigo-500 text-sm font-bold text-gray-700 bg-white"
+                >
+                  <option value="Todos">Todos os Tipos</option>
+                  <option value="Física">Física</option>
+                  <option value="Eletrônica">Eletrônica</option>
+                  <option value="Geral">Geral</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="text-sm font-bold text-indigo-600 mb-4 bg-indigo-50 inline-block px-3 py-1 rounded-lg">
+              Mostrando {certidoesFiltradas.length} resultados
+            </div>
+
+            {certidoesFiltradas.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-[500px] overflow-y-auto pr-2">
+                {certidoesFiltradas.map((cert, idx) => {
+                  const tipoNorm = normalizarTipo(cert.tipo);
+                  const tipoCor = tipoNorm === 'Eletrônica' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700';
+                  
+                  return (
+                    <div 
+                      key={idx} 
+                      onClick={() => setCertidaoExpandida(cert)}
+                      className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col gap-2 relative cursor-pointer hover:border-indigo-300 hover:bg-indigo-50 transition-colors group"
+                    >
+                      <div className="flex justify-between items-start">
+                        <span className="font-bold text-gray-800 group-hover:text-indigo-700 transition-colors">{cert.consultor}</span>
+                        <span className={`text-[10px] font-black px-2 py-1 rounded uppercase tracking-wider ${tipoCor}`}>
+                          {tipoNorm}
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-500 font-medium">📅 {new Date(cert.data).toLocaleDateString('pt-BR')}</div>
+                      
+                      <div className="bg-gray-50 p-2 rounded-lg mt-2 text-sm border border-gray-100 group-hover:bg-white transition-colors">
+                        <div className="flex flex-col gap-1">
+                          <span className="truncate">⚖️ <b>Processo:</b> {cert.processo || '-'}</span>
+                          <span className="truncate">📞 <b>Chamado:</b> {cert.incidente || '-'}</span>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-gray-400 font-bold uppercase mt-1">🖱️ Clique para ver tudo</p>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-center text-gray-400 mt-10 font-bold text-lg">Nenhuma certidão encontrada com esse filtro.</p>
+            )}
+          </div>
+        )}
+
+      </div>
+
+      {/* 👇 MODAL POPOVER PARA VER A CERTIDÃO COMPLETA */}
+      {certidaoExpandida && (
+        <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-3xl p-6 shadow-2xl border border-gray-200 relative animate-in fade-in zoom-in-95 duration-200">
+            <button 
+              onClick={() => setCertidaoExpandida(null)} 
+              className="absolute top-4 right-5 text-gray-400 hover:text-red-500 text-3xl font-bold transition-colors"
+            >
+              ✖
+            </button>
+            
+            <h3 className="text-2xl font-black text-indigo-900 mb-6 border-b border-gray-100 pb-4">Detalhes da Certidão</h3>
+            
+            <div className="flex flex-col gap-4">
+              <div className="flex justify-between items-center bg-gray-50 p-4 rounded-xl border border-gray-200">
+                 <span className="font-bold text-gray-500 uppercase tracking-wider text-xs">Consultor Responsável:</span>
+                 <span className="font-black text-lg text-indigo-700">{certidaoExpandida.consultor}</span>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                 <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 flex flex-col gap-1">
+                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">📅 Data do Evento</span>
+                    <span className="font-bold text-gray-800">{new Date(certidaoExpandida.data).toLocaleDateString('pt-BR')}</span>
+                 </div>
+                 <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 flex flex-col gap-1">
+                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">📌 Tipo Documento</span>
+                    <span className="font-bold text-gray-800">{normalizarTipo(certidaoExpandida.tipo)}</span>
+                 </div>
+              </div>
+
+              <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 flex flex-col gap-4">
+                 <div className="flex flex-col">
+                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">⚖️ Número do Processo</span>
+                    <span className="font-bold text-gray-800 text-base">{certidaoExpandida.processo || 'Não informado'}</span>
+                 </div>
+                 <div className="flex flex-col">
+                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">📞 Chamado / Incidente</span>
+                    <span className="font-bold text-gray-800 text-base">{certidaoExpandida.incidente || 'Não informado'}</span>
+                 </div>
+                 <div className="flex flex-col">
+                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">👤 Nome da Parte / Advogado</span>
+                    <span className="font-bold text-gray-800 text-base">{certidaoExpandida.nome_parte || 'Não informado'}</span>
+                 </div>
+              </div>
+
+              <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-200 flex flex-col gap-2 mt-2">
+                 <span className="text-xs font-black text-indigo-500 uppercase tracking-wider">📝 Motivo Detalhado</span>
+                 <span className="font-medium text-indigo-900 leading-relaxed italic">
+                   "{certidaoExpandida.motivo || 'Nenhum motivo adicional foi registrado.'}"
+                 </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
