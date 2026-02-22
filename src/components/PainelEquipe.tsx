@@ -1,100 +1,11 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useBastaoStore } from '../store/useBastaoStore'
 import { USUARIOS_SISTEMA, getRamal } from '../constants'
 
-// =============================================
-// COMPONENTE: Tooltip flutuante com ramal + mensagens do mural
-// =============================================
-function TooltipConsultor({ nome, children }: { nome: string; children: React.ReactNode }) {
-  const { logmein } = useBastaoStore();
-  const [visivel, setVisivel] = useState(false);
-  const [posicao, setPosicao] = useState<'bottom' | 'top'>('bottom');
-  const containerRef = useRef<HTMLDivElement>(null);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const ramal = getRamal(nome);
-  const primeiroNome = nome.split(' ')[0];
-
-  // Pega as 5 últimas mensagens do consultor OU que mencionam ele
-  const mensagensRelacionadas = (logmein.mensagens || [])
-    .filter(m => m.autor === nome || m.autor === primeiroNome || m.texto.includes(`@${primeiroNome}`) || m.texto.includes(nome))
-    .slice(0, 5);
-
-  const handleMouseEnter = () => {
-    timeoutRef.current = setTimeout(() => {
-      // Calcula se o tooltip cabe abaixo ou precisa ir pra cima
-      if (containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect();
-        const espacoAbaixo = window.innerHeight - rect.bottom;
-        setPosicao(espacoAbaixo < 260 ? 'top' : 'bottom');
-      }
-      setVisivel(true);
-    }, 300);
-  };
-
-  const handleMouseLeave = () => {
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    setVisivel(false);
-  };
-
-  return (
-    <div
-      ref={containerRef}
-      className="relative"
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-    >
-      {children}
-
-      {visivel && (
-        <div className={`absolute z-[999] left-0 ${posicao === 'bottom' ? 'top-full mt-2' : 'bottom-full mb-2'} w-80 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden animate-in fade-in`}
-          style={{ animation: 'fadeIn 0.15s ease-out' }}
-        >
-          {/* Cabeçalho com nome e ramal */}
-          <div className="bg-gradient-to-r from-orange-500 to-amber-500 p-4 text-white">
-            <p className="font-black text-lg">{nome}</p>
-            <p className="text-orange-100 font-bold flex items-center gap-2 mt-1">
-              ☎ Ramal: <span className="bg-white/20 px-3 py-1 rounded-lg text-white font-black text-base">{ramal}</span>
-            </p>
-          </div>
-
-          {/* Últimas mensagens no mural */}
-          <div className="p-3 max-h-48 overflow-y-auto">
-            <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-2">
-              💬 Últimas mensagens no mural
-            </p>
-            {mensagensRelacionadas.length > 0 ? (
-              <div className="flex flex-col gap-2">
-                {mensagensRelacionadas.map(msg => {
-                  const hora = new Date(msg.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-                  const dia = new Date(msg.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-                  return (
-                    <div key={msg.id} className="bg-gray-50 p-2.5 rounded-lg border border-gray-100">
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-[10px] font-bold text-gray-500">{msg.autor}</span>
-                        <span className="text-[10px] text-gray-400 font-mono">{dia} {hora}</span>
-                      </div>
-                      <p className="text-xs text-gray-700 font-medium leading-relaxed line-clamp-2">{msg.texto}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-xs text-gray-400 italic text-center py-3">Nenhuma mensagem recente</p>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// =============================================
-// COMPONENTE PRINCIPAL: PainelEquipe
-// =============================================
 export function PainelEquipe() {
   const { meuLogin, statusTexto, statusDetalhe, filaEproc, filaJpe, updateStatus } = useBastaoStore()
   const [statusAberto, setStatusAberto] = useState<string | null>(null)
+  const [ramalPopover, setRamalPopover] = useState<string | null>(null)
 
   const handleVoltarParaFila = (nome: string) => {
     const usuarioLogado = USUARIOS_SISTEMA.find(u => u.nome === meuLogin);
@@ -107,6 +18,28 @@ export function PainelEquipe() {
        if (!confirmar) return;
     }
     updateStatus(nome, '', true, ''); 
+  }
+
+  // NOVO: Para quem está no bastão E em Atividades/Projeto, ao clicar remove só o status (fica no bastão)
+  const handleRemoverStatusApenas = (nome: string) => {
+    const usuarioLogado = USUARIOS_SISTEMA.find(u => u.nome === meuLogin);
+    const isSecretaria = usuarioLogado?.perfil === 'Secretaria' || usuarioLogado?.perfil === 'Gestor';
+
+    const naFila = filaEproc.includes(nome) || filaJpe.includes(nome);
+
+    if (!isSecretaria && meuLogin !== nome) {
+       const confirmar = window.confirm(
+          `⚠️ AUDITORIA\n\nVocê está removendo o status de ${nome}.\nEsta ação será registrada no banco de dados em seu nome (${meuLogin}).\n\nDeseja continuar?`
+       );
+       if (!confirmar) return;
+    }
+
+    // Se está no bastão, mantém na fila e limpa o status
+    if (naFila) {
+      updateStatus(nome, '', true, '');
+    } else {
+      updateStatus(nome, '', true, '');
+    }
   }
 
   const getStatusStyle = (status: string) => {
@@ -122,15 +55,41 @@ export function PainelEquipe() {
     }
   }
 
+  const getStatusEmoji = (status: string) => {
+    switch(status) {
+      case 'Atividades': return '📋';
+      case 'Projeto': return '🏗️';
+      case 'Treinamento': return '🎓';
+      case 'Reunião': return '📅';
+      case 'Almoço': return '🍽️';
+      case 'Sessão': return '🎙️';
+      case 'Atend. Presencial': return '🤝';
+      default: return '';
+    }
+  }
+
+  // NOVO: Agrupamento agora inclui consultores que estão no bastão MAS com status Atividades/Projeto
   const agrupado = USUARIOS_SISTEMA.reduce((acc, user) => {
     if (user.perfil === 'Secretaria' || user.perfil === 'Gestor') return acc;
     const nome = user.nome;
     const naFila = filaEproc.includes(nome) || filaJpe.includes(nome);
+    const statusAtual = statusTexto[nome] && statusTexto[nome] !== '' ? statusTexto[nome] : '';
+
+    // Se está no bastão E tem status Atividades ou Projeto → aparece nos dois lugares
+    if (naFila && (statusAtual === 'Atividades' || statusAtual === 'Projeto')) {
+      if (!acc[statusAtual]) acc[statusAtual] = [];
+      acc[statusAtual].push(nome);
+      return acc;
+    }
+
+    // Se está no bastão sem status especial → não aparece aqui
     if (naFila) return acc;
-    let statusAtual = statusTexto[nome] && statusTexto[nome] !== '' ? statusTexto[nome] : 'Indisponível';
-    if (statusAtual === 'Com o Bastão') statusAtual = 'Indisponível';
-    if (!acc[statusAtual]) acc[statusAtual] = [];
-    acc[statusAtual].push(nome);
+
+    // Fora do bastão → agrupa pelo status
+    let status = statusAtual || 'Indisponível';
+    if (status === 'Com o Bastão') status = 'Indisponível';
+    if (!acc[status]) acc[status] = [];
+    acc[status].push(nome);
     return acc;
   }, {} as Record<string, string[]>);
 
@@ -155,30 +114,44 @@ export function PainelEquipe() {
         <div className="flex flex-wrap gap-3">
           {statusKeys.map(status => (
             <button key={status} onClick={() => setStatusAberto(status)} className={`px-4 py-2 rounded-xl border-2 font-black text-sm shadow-sm transition-all active:scale-95 ${getStatusStyle(status)}`}>
-              {status} <span className="bg-white/50 px-2 py-0.5 rounded-md ml-1">{agrupado[status].length}</span>
+              {getStatusEmoji(status)} {status} <span className="bg-white/50 px-2 py-0.5 rounded-md ml-1">{agrupado[status].length}</span>
             </button>
           ))}
         </div>
       )}
 
+      {/* Modal de pessoas no status */}
       {statusAberto && agrupado[statusAberto] && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-2xl p-6 shadow-2xl border border-gray-200">
             <h3 className="text-xl font-black text-gray-800 mb-4 border-b pb-2 flex justify-between items-center">
-              Pessoas em: {statusAberto}
+              {getStatusEmoji(statusAberto)} Pessoas em: {statusAberto}
               <button onClick={() => setStatusAberto(null)} className="text-gray-400 hover:text-red-500 text-2xl">✖</button>
             </h3>
             
             <div className="flex flex-col gap-3 max-h-[60vh] overflow-y-auto pr-2">
-              {agrupado[statusAberto]?.map(nome => (
-                <TooltipConsultor key={nome} nome={nome}>
+              {agrupado[statusAberto]?.map(nome => {
+                const naFila = filaEproc.includes(nome) || filaJpe.includes(nome);
+                return (
                   <div 
-                    onClick={() => handleVoltarParaFila(nome)}
-                    title="Clique para devolver ao Bastão"
-                    className="bg-gray-50 border border-gray-200 p-3 rounded-xl cursor-pointer hover:bg-orange-50 hover:border-orange-300 transition-colors group"
+                    key={nome}
+                    className="bg-gray-50 border border-gray-200 p-3 rounded-xl cursor-pointer hover:bg-orange-50 hover:border-orange-300 transition-colors group relative"
                   >
                     <div className="flex justify-between items-center mb-1">
-                      <span className="font-bold text-gray-800 text-lg group-hover:text-orange-700">{nome}</span>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="font-bold text-gray-800 text-lg group-hover:text-orange-700"
+                          onMouseEnter={() => setRamalPopover(nome)}
+                          onMouseLeave={() => setRamalPopover(null)}
+                        >
+                          {nome}
+                        </span>
+                        {naFila && (
+                          <span className="text-[10px] font-black bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full border border-orange-200">
+                            🔥 No Bastão
+                          </span>
+                        )}
+                      </div>
                       <span className="text-xs font-black bg-gray-200 text-gray-600 px-2 py-1 rounded-md transition-transform duration-300 group-hover:scale-125 origin-right group-hover:bg-orange-100 group-hover:text-orange-700">
                         ☎ {getRamal(nome)}
                       </span>
@@ -188,14 +161,35 @@ export function PainelEquipe() {
                     ) : (
                       <p className="text-xs text-gray-400 font-medium italic">Sem detalhes adicionais</p>
                     )}
+                    
+                    {/* Overlay ao hover — ação depende se está no bastão ou não */}
+                    <div 
+                      onClick={() => naFila ? handleRemoverStatusApenas(nome) : handleVoltarParaFila(nome)}
+                      className="absolute inset-0 bg-orange-500/90 text-white font-black text-sm flex items-center justify-center rounded-xl opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm"
+                    >
+                      {naFila ? '📋 Clique para remover o status (continua no Bastão)' : '🔥 Clique para voltar à Fila'}
+                    </div>
                   </div>
-                </TooltipConsultor>
-              ))}
+                );
+              })}
             </div>
 
             <button onClick={() => setStatusAberto(null)} className="w-full mt-6 bg-gray-200 text-gray-800 font-bold py-3 rounded-xl hover:bg-gray-300">
               Fechar
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* POPOVER GRANDE DO RAMAL — centralizado na tela */}
+      {ramalPopover && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center pointer-events-none">
+          <div className="bg-white rounded-3xl shadow-2xl border-2 border-orange-200 p-8 text-center pointer-events-none" style={{ animation: 'fadeIn 0.15s ease-out' }}>
+            <p className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-1">Ramal de</p>
+            <p className="text-2xl font-black text-gray-800 mb-4">{ramalPopover}</p>
+            <div className="bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-2xl px-10 py-5 shadow-lg">
+              <p className="text-5xl font-black tracking-wider">☎ {getRamal(ramalPopover)}</p>
+            </div>
           </div>
         </div>
       )}

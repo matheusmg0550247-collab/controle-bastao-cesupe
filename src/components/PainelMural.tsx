@@ -1,12 +1,22 @@
 import { useState } from 'react';
 import { useBastaoStore } from '../store/useBastaoStore';
 
+// Definido localmente para evitar erro de import
+interface MensagemMural {
+  id: string;
+  autor: string;
+  texto: string;
+  data: string;
+  tipo: string;
+}
+
 export function PainelMural() {
   const { logmein, adicionarMensagemMural, meuLogin } = useBastaoStore();
   const [filtro, setFiltro] = useState('Todas');
   const [novaMsg, setNovaMsg] = useState('');
+  const [msgExpandida, setMsgExpandida] = useState<MensagemMural | null>(null);
 
-  const todasMensagens = logmein.mensagens || [];
+  const todasMensagens: MensagemMural[] = (logmein.mensagens || []) as MensagemMural[];
 
   const handleEnviar = (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,7 +42,7 @@ export function PainelMural() {
   if (filtro === 'Consultores') exibicao = outrasMensagens.filter(m => !gestores.includes(m.autor) && !secProj.includes(m.autor) && m.tipo !== 'logmein');
   if (filtro === 'Menções') exibicao = outrasMensagens.filter(m => m.texto.includes('@'));
 
-  const renderCard = (msg: any, isPinned: boolean) => {
+  const renderCard = (msg: MensagemMural, isPinned: boolean) => {
     const isGestao = gestores.includes(msg.autor);
     const isSecProj = secProj.includes(msg.autor);
     const isLogmein = msg.tipo === 'logmein';
@@ -61,8 +71,11 @@ export function PainelMural() {
     const horaFormatada = new Date(msg.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
     return (
-      // 👇 EFEITO DE ZOOM AQUI: hover:scale-[1.02] hover:-translate-y-1 hover:shadow-lg origin-left
-      <div key={msg.id} className={`p-4 rounded-xl border ${css} transition-all duration-300 hover:scale-[1.02] hover:-translate-y-0.5 hover:shadow-xl origin-left cursor-default`}>
+      <div
+        key={msg.id}
+        onClick={() => setMsgExpandida(msg)}
+        className={`p-4 rounded-xl border ${css} transition-all duration-300 hover:scale-[1.02] hover:-translate-y-0.5 hover:shadow-xl origin-left cursor-pointer`}
+      >
         <div className="flex justify-between items-center mb-1">
           <span className={`font-bold flex items-center gap-2 ${isDarkBg ? 'text-white' : ''}`}>
             {emoji} {msg.autor}
@@ -72,11 +85,24 @@ export function PainelMural() {
             {horaFormatada}
           </span>
         </div>
-        <p className={`text-sm mt-1 font-medium ${isDarkBg ? 'text-white' : 'text-gray-800'}`}>
+        <p className={`text-sm mt-1 font-medium ${isDarkBg ? 'text-white' : 'text-gray-800'} line-clamp-2`}>
           {msg.texto}
         </p>
       </div>
     );
+  };
+
+  const formatarDataCompleta = (data: string) => {
+    const d = new Date(data);
+    return d.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }) 
+      + ' às ' 
+      + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  };
+
+  const getAutorTag = (autor: string) => {
+    if (gestores.includes(autor)) return { label: 'Gestor', css: 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white', emoji: '👑' };
+    if (secProj.includes(autor)) return { label: 'Secretaria/Projetos', css: 'bg-pink-100 text-pink-700 border border-pink-300', emoji: '🌸' };
+    return { label: 'Consultor', css: 'bg-gray-100 text-gray-700 border border-gray-300', emoji: '💬' };
   };
 
   return (
@@ -108,6 +134,39 @@ export function PainelMural() {
         <input type="text" value={novaMsg} onChange={e => setNovaMsg(e.target.value)} placeholder="Escreva um recado (Use @Nome para alertar)..." className="flex-1 border-2 border-gray-200 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 font-medium text-gray-700 bg-gray-50" />
         <button type="submit" disabled={!novaMsg.trim()} className="bg-indigo-900 hover:bg-indigo-800 text-white font-bold px-6 py-3 rounded-xl shadow-md transition-transform active:scale-95 disabled:opacity-50">Enviar</button>
       </form>
+
+      {/* POPOVER DE MENSAGEM EXPANDIDA */}
+      {msgExpandida && (
+        <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setMsgExpandida(null)}>
+          <div className="bg-white w-full max-w-lg rounded-3xl p-6 shadow-2xl border border-gray-200 relative" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setMsgExpandida(null)} className="absolute top-4 right-5 text-gray-400 hover:text-red-500 text-2xl font-bold">✖</button>
+            
+            <div className="flex items-center gap-3 mb-4">
+              <span className="text-3xl">{getAutorTag(msgExpandida.autor).emoji}</span>
+              <div>
+                <p className="text-xl font-black text-gray-800">{msgExpandida.autor}</p>
+                <span className={`text-xs font-black px-2 py-1 rounded-lg ${getAutorTag(msgExpandida.autor).css}`}>
+                  {getAutorTag(msgExpandida.autor).label}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-sm text-gray-400 font-bold mb-4 bg-gray-50 p-2 rounded-lg">
+              🕐 {formatarDataCompleta(msgExpandida.data)}
+            </p>
+
+            {msgExpandida.tipo === 'logmein' && (
+              <span className="inline-block text-xs font-black bg-indigo-100 text-indigo-700 px-3 py-1 rounded-lg mb-3">💻 Mensagem do LogMeIn</span>
+            )}
+
+            <div className="bg-gray-50 p-5 rounded-2xl border border-gray-200">
+              <p className="text-base font-medium text-gray-800 leading-relaxed whitespace-pre-wrap">
+                {msgExpandida.texto}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
