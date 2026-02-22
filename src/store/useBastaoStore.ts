@@ -32,6 +32,43 @@ interface BastaoState {
 
 const TEAM_ID = 2; const LOGMEIN_ID = 1; let realtimeConectado = false; 
 
+// =============================================
+// FUNÇÃO AUXILIAR: Registra passagem de bastão na tabela daily_logs
+// =============================================
+async function registrarPassagemBastao(consultor: string, equipe: string) {
+  const hoje = new Date().toISOString().split('T')[0];
+  try {
+    // Tenta buscar registro existente do consultor para hoje
+    const { data: existente } = await supabase
+      .from('daily_logs')
+      .select('id, payload')
+      .eq('consultor', consultor)
+      .eq('date', hoje)
+      .eq('source', 'bastao_pass')
+      .maybeSingle();
+
+    if (existente) {
+      // Incrementa o contador
+      const payloadAtual = (existente.payload as any) || {};
+      const contadorAtual = payloadAtual.bastoes_assumidos || 0;
+      await supabase.from('daily_logs').update({
+        payload: { ...payloadAtual, bastoes_assumidos: contadorAtual + 1, equipe, ultima_passagem: new Date().toISOString() },
+        updated_at: new Date().toISOString()
+      }).eq('id', existente.id);
+    } else {
+      // Cria registro novo
+      await supabase.from('daily_logs').insert({
+        date: hoje,
+        consultor,
+        source: 'bastao_pass',
+        payload: { bastoes_assumidos: 1, equipe, ultima_passagem: new Date().toISOString() }
+      });
+    }
+  } catch (err) {
+    console.error('Erro ao registrar passagem de bastão:', err);
+  }
+}
+
 export const useBastaoStore = create<BastaoState>((set, get) => ({
   filaEproc: [], filaJpe: [], statusTexto: {}, statusDetalhe: {}, skipFlags: {}, quickIndicators: {}, ultimaAuditoria: null,
   meuLogin: localStorage.getItem('@bastao:meuLogin'), alvoSelecionado: null,
@@ -135,6 +172,11 @@ export const useBastaoStore = create<BastaoState>((set, get) => ({
     while (novaFila.length > 0 && novasSkips[novaFila[0]]) { const pulou = novaFila.shift()!; novasSkips[pulou] = false; novaFila.push(pulou); }
     const newState: Partial<BastaoState> = equipe === "EPROC" ? { filaEproc: novaFila, skipFlags: novasSkips } : { filaJpe: novaFila, skipFlags: novasSkips };
     set(newState); get()._saveToDb(newState, `Passou bastão ${equipe}`);
+
+    // =============================================
+    // NOVO: Registra a passagem na tabela daily_logs
+    // =============================================
+    registrarPassagemBastao(novaFila[0], equipe);
     
     const payload = { evento: "bastao_giro", team_name: equipe === "EPROC" ? "Eproc" : "Legados", com_bastao_agora: novaFila[0], proximos: novaFila.slice(1) };
     fetch("https://matheusgomes12.app.n8n.cloud/webhook/b0fe5e6a-7586-4d95-8472-463d84237c09", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }).catch(() => {});

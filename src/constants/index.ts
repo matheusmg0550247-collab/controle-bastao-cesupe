@@ -24,8 +24,31 @@ export const RAMAIS: Record<string, string> = {
   "Marcelo": "2655", "Marcelo Pena": "4208", "Marcelo Pena Guerra": "4208", "Marina Amaral": "4211",
   "Marina Marques": "2607", "Matheus": "2664", "Michael": "2516", "Michael Douglas": "2516",
   "Morôni": "4206", "Pablo": "2658", "Ranyer": "2669", "Sarah": "2643",
-  "Vanessa": "2510", "Victória": "2660", "Victoria": "2660"
+  "Vanessa": "2510", "Victória": "2660", "Victoria": "2660",
+  "Brenda": "", "Marina Torres": ""
 };
+
+// ========================
+// USUARIOS DO SISTEMA (Gestores, Secretárias e Consultores)
+// ========================
+export interface UsuarioSistema {
+  nome: string;
+  perfil: 'Gestor' | 'Secretaria' | 'Consultor';
+}
+
+export const USUARIOS_SISTEMA: UsuarioSistema[] = [
+  // Gestores
+  { nome: 'Matheus', perfil: 'Gestor' },
+  { nome: 'Gilberto', perfil: 'Gestor' },
+  // Secretárias / Projetos
+  { nome: 'Juliana', perfil: 'Secretaria' },
+  { nome: 'Brenda', perfil: 'Secretaria' },
+  { nome: 'Larissa', perfil: 'Secretaria' },
+  // Consultores EPROC
+  ...EQUIPE_EPROC.map(nome => ({ nome, perfil: 'Consultor' as const })),
+  // Consultores JPE
+  ...EQUIPE_JPE.map(nome => ({ nome, perfil: 'Consultor' as const })),
+];
 
 // Função auxiliar para buscar o ramal: tenta o nome completo, se não achar, tenta o primeiro nome
 export function getRamal(nome: string): string {
