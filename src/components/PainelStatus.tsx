@@ -4,30 +4,28 @@ import { USUARIOS_SISTEMA } from '../constants'
 
 export function PainelStatus() {
   const { meuLogin, alvoSelecionado, updateStatus, setLogmeinOpen } = useBastaoStore()
-  
+
   const [modalStatus, setModalStatus] = useState<string | null>(null)
   const [detalheText, setDetalheText] = useState('')
   const [manterNaFila, setManterNaFila] = useState(false)
 
   const handleAbrirModal = (status: string, regraPadraoFila: boolean) => {
     if (!alvoSelecionado) return alert('Selecione alguém no painel de Ações primeiro!');
-    
-    // VERIFICAÇÃO DA AUDITORIA
+
     const usuarioLogado = USUARIOS_SISTEMA.find(u => u.nome === meuLogin);
     const isSecretaria = usuarioLogado?.perfil === 'Secretaria' || usuarioLogado?.perfil === 'Gestor';
 
     if (!isSecretaria && meuLogin !== alvoSelecionado) {
-       const confirmar = window.confirm(
-          `⚠️ AUDITORIA\n\nVocê está aplicando "${status}" no perfil de ${alvoSelecionado}.\nEsta ação será registrada no banco de dados em seu nome (${meuLogin}).\n\nDeseja continuar?`
-       );
-       if (!confirmar) return;
+      const confirmar = window.confirm(`⚠️ AUDITORIA\n\nVocê está aplicando "${status}" no perfil de ${alvoSelecionado}.\nEsta ação será registrada em seu nome (${meuLogin}).\n\nDeseja continuar?`);
+      if (!confirmar) return;
     }
 
-    if (status === 'Almoço') {
+    // Almoço e Lanche: aplica direto sem modal
+    if (status === 'Almoço' || status === 'Lanche') {
       updateStatus(alvoSelecionado, status, false, '');
       return;
     }
-    
+
     setDetalheText('');
     setManterNaFila(regraPadraoFila);
     setModalStatus(status);
@@ -50,13 +48,14 @@ export function PainelStatus() {
   return (
     <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 relative">
       <h2 className="text-xl font-bold mb-4 text-gray-800 border-b pb-2">🔄 Status Rápido</h2>
-      
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
         <button onClick={() => handleAbrirModal('Atividades', true)} className={btnClass}>📋 Atividades</button>
         <button onClick={() => handleAbrirModal('Projeto', true)} className={btnClass}>🏗️ Projeto</button>
         <button onClick={() => handleAbrirModal('Treinamento', false)} className={btnClass}>🎓 Treinamento</button>
         <button onClick={() => handleAbrirModal('Reunião', false)} className={btnClass}>📅 Reunião</button>
         <button onClick={() => handleAbrirModal('Almoço', false)} className={btnClass}>🍽️ Almoço</button>
+        <button onClick={() => handleAbrirModal('Lanche', false)} className={btnClass}>🍔 Lanche</button>
         <button onClick={() => handleAbrirModal('Sessão', false)} className={btnClass}>🎙️ Sessão</button>
         <button onClick={() => handleAbrirModal('Atend. Presencial', false)} className={btnClass}>🤝 Presencial</button>
         <button onClick={handleAbrirLogmein} className={`${btnClass} bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100`}>💻 LogMeIn</button>
@@ -67,7 +66,7 @@ export function PainelStatus() {
           <div className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl border border-gray-200">
             <h3 className="text-lg font-black text-gray-800 mb-2">Informar detalhes</h3>
             <p className="text-sm text-gray-500 mb-4">Status: <strong className="text-indigo-600">{modalStatus}</strong> para {alvoSelecionado}</p>
-            
+
             <label className="block text-sm font-bold text-gray-700 mb-1">Qual o detalhe? (Opcional)</label>
             <input type="text" value={detalheText} onChange={e => setDetalheText(e.target.value)} placeholder="Ex: BNMP, Reunião Diretoria..." className="w-full border-2 border-gray-200 rounded-xl p-3 outline-none focus:border-indigo-500 mb-4" autoFocus />
 

@@ -1,13 +1,8 @@
 import { useState } from 'react';
 import { useBastaoStore } from '../store/useBastaoStore';
 
-// Definido localmente para evitar erro de import
 interface MensagemMural {
-  id: string;
-  autor: string;
-  texto: string;
-  data: string;
-  tipo: string;
+  id: string; autor: string; texto: string; data: string; tipo: string;
 }
 
 export function PainelMural() {
@@ -48,7 +43,7 @@ export function PainelMural() {
     const isLogmein = msg.tipo === 'logmein';
     const hasMention = msg.texto.includes('@');
 
-    let css = "bg-white border-gray-200 text-gray-700"; 
+    let css = "bg-white border-gray-200 text-gray-700";
     let emoji = "💬";
 
     if (isGestao) {
@@ -61,12 +56,12 @@ export function PainelMural() {
       css = "bg-gradient-to-r from-indigo-50 to-blue-50 border-indigo-200 shadow-indigo-50";
       emoji = "💻";
     } else if (hasMention) {
-      css = "bg-gradient-to-r from-red-500 to-rose-500 border-red-600 text-white shadow-lg animate-pulse";
+      // REMOVIDO animate-pulse — era a causa do tremor!
+      css = "bg-gradient-to-r from-red-500 to-rose-500 border-red-600 text-white shadow-lg";
       emoji = "🚨";
     }
 
     if (isPinned) css += " ring-2 ring-white";
-
     const isDarkBg = isGestao || (hasMention && !isSecProj && !isLogmein);
     const horaFormatada = new Date(msg.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
@@ -74,7 +69,7 @@ export function PainelMural() {
       <div
         key={msg.id}
         onClick={() => setMsgExpandida(msg)}
-        className={`p-4 rounded-xl border ${css} transition-all duration-300 hover:scale-[1.02] hover:-translate-y-0.5 hover:shadow-xl origin-left cursor-pointer`}
+        className={`p-4 rounded-xl border ${css} transition-shadow duration-200 hover:shadow-xl cursor-pointer`}
       >
         <div className="flex justify-between items-center mb-1">
           <span className={`font-bold flex items-center gap-2 ${isDarkBg ? 'text-white' : ''}`}>
@@ -94,8 +89,8 @@ export function PainelMural() {
 
   const formatarDataCompleta = (data: string) => {
     const d = new Date(data);
-    return d.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }) 
-      + ' às ' 
+    return d.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
+      + ' às '
       + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   };
 
@@ -127,7 +122,10 @@ export function PainelMural() {
             {msgLogmein && renderCard(msgLogmein, true)}
           </div>
         )}
-        {exibicao.length === 0 ? <p className="text-center text-gray-400 mt-10 font-medium italic">Nenhuma mensagem.</p> : exibicao.map(msg => renderCard(msg, false))}
+        {exibicao.length === 0
+          ? <p className="text-center text-gray-400 mt-10 font-medium italic">Nenhuma mensagem.</p>
+          : exibicao.map(msg => renderCard(msg, false))
+        }
       </div>
 
       <form onSubmit={handleEnviar} className="mt-4 flex gap-2 pt-4 border-t border-gray-200">
@@ -140,7 +138,7 @@ export function PainelMural() {
         <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setMsgExpandida(null)}>
           <div className="bg-white w-full max-w-lg rounded-3xl p-6 shadow-2xl border border-gray-200 relative" onClick={(e) => e.stopPropagation()}>
             <button onClick={() => setMsgExpandida(null)} className="absolute top-4 right-5 text-gray-400 hover:text-red-500 text-2xl font-bold">✖</button>
-            
+
             <div className="flex items-center gap-3 mb-4">
               <span className="text-3xl">{getAutorTag(msgExpandida.autor).emoji}</span>
               <div>

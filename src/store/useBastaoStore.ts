@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { getEquipe } from '../constants'
 import { supabase } from '../lib/supabase'
 
-interface Indicadores { telefone: boolean; cafe: boolean; }
+interface Indicadores { telefone: boolean; cafe: boolean; lanche: boolean; }
 interface Auditoria { ator: string; acao: string; data: string; }
 export interface MensagemMural { id: string; texto: string; autor: string; data: string; tipo: 'comum' | 'logmein'; }
 export interface LogmeinState { emUso: boolean; consultor: string | null; assumidoEm: string | null; mensagens: MensagemMural[]; }
@@ -19,54 +19,40 @@ interface BastaoState {
   setMeuLogin: (nome: string) => void; setAlvoSelecionado: (nome: string) => void;
   updateStatus: (nome: string, status: string, manterNaFila?: boolean, detalhe?: string) => void;
   toggleFila: (nome: string) => void;
-  toggleTelefone: (nome: string) => void; toggleCafe: (nome: string) => void; toggleSkip: (nome: string) => void;
+  toggleTelefone: (nome: string) => void; toggleCafe: (nome: string) => void; toggleLanche: (nome: string) => void; toggleSkip: (nome: string) => void;
   passarBastao: (equipe: "EPROC" | "JPE") => void;
   assumirLogmein: (alvo: string, ator: string) => void;
   liberarLogmein: (alvo: string, ator: string) => void;
   pedirLiberacaoLogmein: (deQuem: string, paraQuem: string) => void;
   adicionarMensagemMural: (texto: string, tipo: 'comum' | 'logmein', autor: string) => void;
+  enviarRegistroN8n: (tipo: string, dados: any, mensagemFormatada: string) => Promise<boolean>;
+  salvarCertidaoSupabase: (payload: any) => Promise<boolean>;
   initRealtime: () => void;
   _saveToDb: (partialState: Partial<BastaoState>, acaoDesc: string) => void;
   _saveLogmeinToDb: (novoLogmein: LogmeinState) => void;
 }
 
-const TEAM_ID = 2; const LOGMEIN_ID = 1; let realtimeConectado = false; 
+const TEAM_ID = 2; const LOGMEIN_ID = 1; let realtimeConectado = false;
+const WEBHOOK_BASTAO = "https://matheusgomes12.app.n8n.cloud/webhook/b0fe5e6a-7586-4d95-8472-463d84237c09";
+const WEBHOOK_REGISTRO = "https://matheusgomes12.app.n8n.cloud/webhook/c0a19cc9-2167-4824-a9b1-3672288f0841";
 
-// =============================================
-// FUNÇÃO AUXILIAR: Registra passagem de bastão na tabela daily_logs
-// =============================================
 async function registrarPassagemBastao(consultor: string, equipe: string) {
   const hoje = new Date().toISOString().split('T')[0];
   try {
-    // Tenta buscar registro existente do consultor para hoje
     const { data: existente } = await supabase
-      .from('daily_logs')
-      .select('id, payload')
-      .eq('consultor', consultor)
-      .eq('date', hoje)
-      .eq('source', 'bastao_pass')
+      .from('daily_logs').select('id, payload')
+      .eq('consultor', consultor).eq('date', hoje).eq('source', 'bastao_pass')
       .maybeSingle();
-
     if (existente) {
-      // Incrementa o contador
       const payloadAtual = (existente.payload as any) || {};
-      const contadorAtual = payloadAtual.bastoes_assumidos || 0;
       await supabase.from('daily_logs').update({
-        payload: { ...payloadAtual, bastoes_assumidos: contadorAtual + 1, equipe, ultima_passagem: new Date().toISOString() },
+        payload: { ...payloadAtual, bastoes_assumidos: (payloadAtual.bastoes_assumidos || 0) + 1, equipe, ultima_passagem: new Date().toISOString() },
         updated_at: new Date().toISOString()
       }).eq('id', existente.id);
     } else {
-      // Cria registro novo
-      await supabase.from('daily_logs').insert({
-        date: hoje,
-        consultor,
-        source: 'bastao_pass',
-        payload: { bastoes_assumidos: 1, equipe, ultima_passagem: new Date().toISOString() }
-      });
+      await supabase.from('daily_logs').insert({ date: hoje, consultor, source: 'bastao_pass', payload: { bastoes_assumidos: 1, equipe, ultima_passagem: new Date().toISOString() } });
     }
-  } catch (err) {
-    console.error('Erro ao registrar passagem de bastão:', err);
-  }
+  } catch (err) { console.error('Erro ao registrar passagem de bastão:', err); }
 }
 
 export const useBastaoStore = create<BastaoState>((set, get) => ({
@@ -82,7 +68,6 @@ export const useBastaoStore = create<BastaoState>((set, get) => ({
     const dataToSave = { filaEproc: partialState.filaEproc ?? state.filaEproc, filaJpe: partialState.filaJpe ?? state.filaJpe, statusTexto: partialState.statusTexto ?? state.statusTexto, statusDetalhe: partialState.statusDetalhe ?? state.statusDetalhe, skipFlags: partialState.skipFlags ?? state.skipFlags, quickIndicators: partialState.quickIndicators ?? state.quickIndicators, ultimaAuditoria: auditoria };
     set({ ultimaAuditoria: auditoria }); await supabase.from('app_state').upsert({ id: TEAM_ID, data: dataToSave });
   },
-
   _saveLogmeinToDb: async (novoLogmein) => { set({ logmein: novoLogmein }); await supabase.from('app_state').upsert({ id: LOGMEIN_ID, data: novoLogmein }); },
 
   initRealtime: async () => {
@@ -99,43 +84,74 @@ export const useBastaoStore = create<BastaoState>((set, get) => ({
       if (resLogmein.data?.data) set({ logmein: { emUso: resLogmein.data.data.emUso || false, consultor: resLogmein.data.data.consultor || null, assumidoEm: resLogmein.data.data.assumidoEm || null, mensagens: resLogmein.data.data.mensagens || [] } });
     };
     await sincronizarComNuvem();
-    
     supabase.channel('painel-realtime').on('postgres_changes', { event: '*', schema: 'public', table: 'app_state' }, (p: any) => {
-        if (!p.new?.data) return; 
-        const novoDb = p.new.data;
-        if (p.new.id === TEAM_ID) set({ filaEproc: novoDb.filaEproc || [], filaJpe: novoDb.filaJpe || [], statusTexto: novoDb.statusTexto || {}, statusDetalhe: novoDb.statusDetalhe || {}, skipFlags: novoDb.skipFlags || {}, quickIndicators: novoDb.quickIndicators || {}, ultimaAuditoria: novoDb.ultimaAuditoria || null });
-        else if (p.new.id === LOGMEIN_ID) set({ logmein: { emUso: novoDb.emUso || false, consultor: novoDb.consultor || null, assumidoEm: novoDb.assumidoEm || null, mensagens: novoDb.mensagens || [] } });
+      if (!p.new?.data) return;
+      const novoDb = p.new.data;
+      if (p.new.id === TEAM_ID) set({ filaEproc: novoDb.filaEproc || [], filaJpe: novoDb.filaJpe || [], statusTexto: novoDb.statusTexto || {}, statusDetalhe: novoDb.statusDetalhe || {}, skipFlags: novoDb.skipFlags || {}, quickIndicators: novoDb.quickIndicators || {}, ultimaAuditoria: novoDb.ultimaAuditoria || null });
+      else if (p.new.id === LOGMEIN_ID) set({ logmein: { emUso: novoDb.emUso || false, consultor: novoDb.consultor || null, assumidoEm: novoDb.assumidoEm || null, mensagens: novoDb.mensagens || [] } });
     }).subscribe();
     setInterval(sincronizarComNuvem, 3500);
   },
 
   adicionarMensagemMural: (texto, tipo, autor) => {
-    const state = get(); const novaMensagem: MensagemMural = { id: Math.random().toString(36).substring(7), texto, autor, data: new Date().toISOString(), tipo };
+    const state = get();
+    const novaMensagem: MensagemMural = { id: Math.random().toString(36).substring(7), texto, autor, data: new Date().toISOString(), tipo };
     const muralAtualizado = [novaMensagem, ...state.logmein.mensagens].slice(0, 100);
     get()._saveLogmeinToDb({ ...state.logmein, mensagens: muralAtualizado });
   },
 
-  assumirLogmein: (alvo, ator) => { 
-    const state = get(); const agora = new Date().toISOString();
-    get()._saveLogmeinToDb({ ...state.logmein, emUso: true, consultor: alvo, assumidoEm: agora }); 
-    get().adicionarMensagemMural(`${ator} assumiu o LogMeIn.`, 'logmein', ator); 
+  // REGISTROS → webhook de REGISTRO (envia campo "message" que o n8n espera)
+  enviarRegistroN8n: async (tipo, dados, mensagemFormatada) => {
+    const state = get();
+    const payload = {
+      tipo,
+      consultor: state.meuLogin,
+      data_envio: new Date().toISOString(),
+      dados,
+      message: mensagemFormatada,
+      mensagem_formatada: mensagemFormatada
+    };
+    fetch(WEBHOOK_REGISTRO, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }).catch(() => {});
+    return true;
   },
-  liberarLogmein: (alvo, ator) => { 
+
+  salvarCertidaoSupabase: async (payload) => {
+    try {
+      const { error } = await supabase.from('certidoes_registro').insert(payload);
+      if (error) { console.error('Erro certidão:', error); return false; }
+      return true;
+    } catch (err) { console.error('Erro certidão:', err); return false; }
+  },
+
+  assumirLogmein: (alvo, ator) => {
+    const state = get();
+    get()._saveLogmeinToDb({ ...state.logmein, emUso: true, consultor: alvo, assumidoEm: new Date().toISOString() });
+    get().adicionarMensagemMural(`${ator} assumiu o LogMeIn.`, 'logmein', ator);
+  },
+  liberarLogmein: (alvo, ator) => {
     const state = get(); let tempoExtra = '';
     if (state.logmein.assumidoEm) {
-        const minutos = Math.max(1, Math.round((new Date().getTime() - new Date(state.logmein.assumidoEm).getTime()) / 60000));
-        tempoExtra = ` (Tempo de uso: ${minutos} min)`;
+      const minutos = Math.max(1, Math.round((new Date().getTime() - new Date(state.logmein.assumidoEm).getTime()) / 60000));
+      tempoExtra = ` (Tempo de uso: ${minutos} min)`;
     }
-    get()._saveLogmeinToDb({ ...state.logmein, emUso: false, consultor: null, assumidoEm: null }); 
-    get().adicionarMensagemMural(`${ator} liberou o LogMeIn.${tempoExtra}`, 'logmein', ator); 
+    get()._saveLogmeinToDb({ ...state.logmein, emUso: false, consultor: null, assumidoEm: null });
+    get().adicionarMensagemMural(`${ator} liberou o LogMeIn.${tempoExtra}`, 'logmein', ator);
   },
-  pedirLiberacaoLogmein: (deQuem, paraQuem) => { 
-    get().adicionarMensagemMural(`⚠️ ${deQuem} solicita a liberação do LogMeIn de ${paraQuem}.`, 'logmein', deQuem); 
+  pedirLiberacaoLogmein: (deQuem, paraQuem) => {
+    get().adicionarMensagemMural(`⚠️ ${deQuem} solicita a liberação do LogMeIn de ${paraQuem}.`, 'logmein', deQuem);
   },
 
   updateStatus: (nome, status, manterNaFila = false, detalhe = '') => {
     const state = get(); const equipe = getEquipe(nome);
-    const newState: Partial<BastaoState> = { statusTexto: { ...state.statusTexto, [nome]: status }, statusDetalhe: { ...state.statusDetalhe, [nome]: detalhe } };
+    const newState: Partial<BastaoState> = {
+      statusTexto: { ...state.statusTexto, [nome]: status },
+      statusDetalhe: { ...state.statusDetalhe, [nome]: detalhe }
+    };
+    if (status === 'Indisponível' || status === '') {
+      newState.quickIndicators = { ...state.quickIndicators, [nome]: { telefone: false, cafe: false, lanche: false } };
+      newState.skipFlags = { ...state.skipFlags, [nome]: false };
+      newState.statusDetalhe = { ...state.statusDetalhe, [nome]: '' };
+    }
     if (equipe) {
       const filaAtual = equipe === "EPROC" ? state.filaEproc : state.filaJpe;
       const estaNaFila = filaAtual.includes(nome);
@@ -157,13 +173,19 @@ export const useBastaoStore = create<BastaoState>((set, get) => ({
     const novaFila = inQueue ? filaAtual.filter(n => n !== nome) : [...filaAtual, nome];
     const newState: Partial<BastaoState> = equipe === "EPROC" ? { filaEproc: novaFila } : { filaJpe: novaFila };
     newState.statusTexto = { ...state.statusTexto, [nome]: inQueue ? 'Indisponível' : '' };
+    if (inQueue) {
+      newState.quickIndicators = { ...state.quickIndicators, [nome]: { telefone: false, cafe: false, lanche: false } };
+      newState.skipFlags = { ...state.skipFlags, [nome]: false };
+      newState.statusDetalhe = { ...state.statusDetalhe, [nome]: '' };
+    }
     set(newState); get()._saveToDb(newState, inQueue ? `Removeu ${nome}` : `Colocou ${nome}`);
   },
 
-  toggleTelefone: (nome) => { const state = get(); const atual = state.quickIndicators[nome] || { telefone: false, cafe: false }; const newState = { quickIndicators: { ...state.quickIndicators, [nome]: { ...atual, telefone: !atual.telefone, cafe: false } } }; set(newState); get()._saveToDb(newState, `Telefone ${nome}`); },
-  toggleCafe: (nome) => { const state = get(); const atual = state.quickIndicators[nome] || { telefone: false, cafe: false }; const newState = { quickIndicators: { ...state.quickIndicators, [nome]: { ...atual, cafe: !atual.cafe, telefone: false } } }; set(newState); get()._saveToDb(newState, `Café ${nome}`); },
+  toggleTelefone: (nome) => { const state = get(); const atual = state.quickIndicators[nome] || { telefone: false, cafe: false, lanche: false }; const newState = { quickIndicators: { ...state.quickIndicators, [nome]: { ...atual, telefone: !atual.telefone, cafe: false, lanche: false } } }; set(newState); get()._saveToDb(newState, `Telefone ${nome}`); },
+  toggleCafe: (nome) => { const state = get(); const atual = state.quickIndicators[nome] || { telefone: false, cafe: false, lanche: false }; const newState = { quickIndicators: { ...state.quickIndicators, [nome]: { ...atual, cafe: !atual.cafe, telefone: false, lanche: false } } }; set(newState); get()._saveToDb(newState, `Café ${nome}`); },
+  toggleLanche: (nome) => { const state = get(); const atual = state.quickIndicators[nome] || { telefone: false, cafe: false, lanche: false }; const newState = { quickIndicators: { ...state.quickIndicators, [nome]: { ...atual, lanche: !atual.lanche, telefone: false, cafe: false } } }; set(newState); get()._saveToDb(newState, `Lanche ${nome}`); },
   toggleSkip: (nome) => { const state = get(); const newState = { skipFlags: { ...state.skipFlags, [nome]: !state.skipFlags[nome] } }; set(newState); get()._saveToDb(newState, `Pular ${nome}`); },
-  
+
   passarBastao: (equipe) => {
     const state = get(); const filaOriginal = equipe === "EPROC" ? state.filaEproc : state.filaJpe;
     if (filaOriginal.length <= 1) return;
@@ -172,13 +194,7 @@ export const useBastaoStore = create<BastaoState>((set, get) => ({
     while (novaFila.length > 0 && novasSkips[novaFila[0]]) { const pulou = novaFila.shift()!; novasSkips[pulou] = false; novaFila.push(pulou); }
     const newState: Partial<BastaoState> = equipe === "EPROC" ? { filaEproc: novaFila, skipFlags: novasSkips } : { filaJpe: novaFila, skipFlags: novasSkips };
     set(newState); get()._saveToDb(newState, `Passou bastão ${equipe}`);
-
-    // =============================================
-    // NOVO: Registra a passagem na tabela daily_logs
-    // =============================================
     registrarPassagemBastao(novaFila[0], equipe);
-    
-    const payload = { evento: "bastao_giro", team_name: equipe === "EPROC" ? "Eproc" : "Legados", com_bastao_agora: novaFila[0], proximos: novaFila.slice(1) };
-    fetch("https://matheusgomes12.app.n8n.cloud/webhook/b0fe5e6a-7586-4d95-8472-463d84237c09", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }).catch(() => {});
+    fetch(WEBHOOK_BASTAO, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ evento: "bastao_giro", team_name: equipe === "EPROC" ? "Eproc" : "Legados", com_bastao_agora: novaFila[0], proximos: novaFila.slice(1) }) }).catch(() => {});
   }
 }))
