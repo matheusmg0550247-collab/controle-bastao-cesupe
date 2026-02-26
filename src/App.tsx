@@ -14,6 +14,21 @@ import { Login } from './components/Login'
 import { useBastaoStore } from './store/useBastaoStore'
 import { USUARIOS_SISTEMA, getRamal } from './constants'
 
+function BotaoDicasDiarias() {
+  return (
+    <a
+      href="/dicasdiarias.html"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="group flex items-center justify-center gap-3 w-full px-6 py-4 bg-gradient-to-r from-amber-400 via-yellow-400 to-orange-400 hover:from-amber-500 hover:via-yellow-500 hover:to-orange-500 text-white font-bold text-base rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5"
+    >
+      <span className="text-2xl group-hover:scale-110 transition-transform duration-300">💡</span>
+      <span className="tracking-wide">Acesso Dicas Diárias</span>
+      <span className="text-white/70 group-hover:translate-x-1 transition-transform duration-300">→</span>
+    </a>
+  )
+}
+
 function App() {
   const { initRealtime, meuLogin } = useBastaoStore()
 
@@ -52,6 +67,7 @@ function App() {
               </div>
               <div className="xl:col-span-1 flex flex-col gap-6">
                 <PainelEquipe />
+                <BotaoDicasDiarias />
                 <PainelMural />
               </div>
             </div>
@@ -65,6 +81,7 @@ function App() {
               <div className="flex flex-col gap-6">
                 <PainelBastao />
                 <PainelEquipe />
+                <BotaoDicasDiarias />
                 <PainelLogmein />
                 <PainelFerramentas />
               </div>
