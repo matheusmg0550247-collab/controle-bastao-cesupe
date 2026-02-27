@@ -10,6 +10,7 @@ import { PainelEquipe } from './components/PainelEquipe'
 import { PainelGerencial } from './components/PainelGerencial'
 import { PainelSessoes } from './components/PainelSessoes'
 import { LojinhaVirtual } from './components/LojinhaVirtual'
+import { LojinhaRashid } from './components/LojinhaRashid'
 import { Login } from './components/Login'
 import { useBastaoStore } from './store/useBastaoStore'
 import { USUARIOS_SISTEMA, getRamal } from './constants'
@@ -75,6 +76,7 @@ function App() {
             </div>
             <PainelSessoes />
             <LojinhaVirtual />
+            <LojinhaRashid />
             <PainelGerencial />
           </main>
         ) : (
@@ -95,6 +97,7 @@ function App() {
             </div>
             <PainelSessoes />
             <LojinhaVirtual />
+            <LojinhaRashid />
           </main>
         )}
       </div>
