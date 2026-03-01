@@ -1,13 +1,13 @@
 export const EQUIPE_EPROC = [
   "Barbara Mara", "Bruno Glaicon", "Claudia Luiza", "Douglas Paiva", "Fábio Alves",
-  "Glayce Torres", "Isabela Dias", "Isac Candido", "Ivana Bastos", "Jonatas", "Leonardo Damaceno",
+  "Glayce Torres", "Isabela Dias", "Isac Candido", "Ivana Guimarães", "Leonardo Damaceno",
   "Marcelo Pena Guerra", "Michael Douglas", "Morôni", "Pablo Mol", "Ranyer Segal",
   "Sarah Leal", "Victoria Lisboa"
 ].sort();
 
 export const EQUIPE_JPE = [
   "Alex Paulo", "Dirceu Gonçalves", "Douglas De Souza", "Farley", "Gleis",
-  "Hugo Leonardo", "Igor Dayrell", "Jerry Marcos", "Leandro",
+  "Hugo Leonardo", "Igor Dayrell", "Jerry Marcos", "Jonatas", "Leandro",
   "Luiz Henrique", "Marcelo dos Santos Dutra", "Marina Marques",
   "Marina Torres", "Vanessa Ligiane"
 ].sort();
@@ -24,10 +24,13 @@ export const RAMAIS: Record<string, string> = {
   "Marcelo": "2655", "Marcelo Pena": "4208", "Marcelo Pena Guerra": "4208", "Marina Amaral": "4211",
   "Marina Marques": "2607", "Matheus": "2664", "Michael": "2516", "Michael Douglas": "2516",
   "Morôni": "4206", "Pablo": "2658", "Ranyer": "2669", "Sarah": "2643",
-  "Vanessa": "2510", "Victoria": "2660",
+  "Vanessa": "2510", "Victória": "2660", "Victoria": "2660",
   "Brenda": "", "Marina Torres": ""
 };
 
+// ========================
+// USUARIOS DO SISTEMA (Gestores, Secretárias e Consultores)
+// ========================
 export interface UsuarioSistema {
   nome: string;
   perfil: 'Gestor' | 'Secretaria' | 'Consultor';
@@ -39,22 +42,34 @@ export const USUARIOS_SISTEMA: UsuarioSistema[] = [
   { nome: 'Matheus', perfil: 'Gestor', equipe: 'Gestão' },
   { nome: 'Gilberto', perfil: 'Gestor', equipe: 'Gestão' },
   // Projetos
-  { nome: 'Juliana', perfil: 'Secretaria', equipe: 'Projetos' },
-  // Secretaria
-  { nome: 'Larissa', perfil: 'Secretaria', equipe: 'Secretaria' },
+  { nome: 'Juliana', perfil: 'Gestor', equipe: 'Projetos' },
+  // Secretaria Cesupe
   { nome: 'Brenda', perfil: 'Secretaria', equipe: 'Secretaria' },
-  // Consultores Eproc
+  { nome: 'Larissa', perfil: 'Secretaria', equipe: 'Secretaria' },
+  // Consultores EPROC
   ...EQUIPE_EPROC.map(nome => ({ nome, perfil: 'Consultor' as const, equipe: 'Eproc' as const })),
-  // Consultores Legados (JPE)
+  // Consultores JPE (Legados)
   ...EQUIPE_JPE.map(nome => ({ nome, perfil: 'Consultor' as const, equipe: 'Legados' as const })),
 ];
 
+// Função auxiliar para buscar o ramal: tenta o nome completo, se não achar, tenta o primeiro nome
 export function getRamal(nome: string): string {
   if (RAMAIS[nome]) return RAMAIS[nome];
   const primeiroNome = nome.split(" ")[0];
   return RAMAIS[primeiroNome] || "S/R";
 }
 
+// Emojis especiais por consultor
+const CONSULTOR_EMOJIS: Record<string, string> = {
+  "Pablo Mol": "🤓",
+};
+
+export function getConsultorDisplayName(nome: string): string {
+  const emoji = CONSULTOR_EMOJIS[nome];
+  return emoji ? `${emoji} ${nome}` : nome;
+}
+
+// Função para descobrir de qual equipe o consultor é
 export function getEquipe(nome: string): "EPROC" | "JPE" | null {
   if (EQUIPE_EPROC.includes(nome)) return "EPROC";
   if (EQUIPE_JPE.includes(nome)) return "JPE";

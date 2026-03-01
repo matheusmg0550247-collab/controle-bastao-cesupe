@@ -25,6 +25,8 @@ interface BastaoState {
   liberarLogmein: (alvo: string, ator: string) => void;
   pedirLiberacaoLogmein: (deQuem: string, paraQuem: string) => void;
   adicionarMensagemMural: (texto: string, tipo: 'comum' | 'logmein', autor: string) => void;
+  enviarRegistroN8n: (tipo: string, dados: any, mensagemFormatada: string) => Promise<boolean>;
+  salvarCertidaoSupabase: (payload: any) => Promise<boolean>;
   initRealtime: () => void;
   _saveToDb: (partialState: Partial<BastaoState>, acaoDesc: string) => void;
   _saveLogmeinToDb: (novoLogmein: LogmeinState) => void;
@@ -115,12 +117,38 @@ export const useBastaoStore = create<BastaoState>((set, get) => ({
     get()._saveLogmeinToDb({ ...state.logmein, mensagens: muralAtualizado });
   },
 
+  enviarRegistroN8n: async (tipo, dados, mensagemFormatada) => {
+    try {
+      const payload = { tipo, dados, message: mensagemFormatada, consultor: get().meuLogin, timestamp: new Date().toISOString() };
+      const res = await fetch("https://matheusgomes12.app.n8n.cloud/webhook/c0a19cc9-2167-4824-a9b1-3672288f0841", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      return res.ok;
+    } catch (err) {
+      console.error('Erro ao enviar para n8n:', err);
+      return false;
+    }
+  },
+
+  salvarCertidaoSupabase: async (payload) => {
+    try {
+      const { error } = await supabase.from('certidoes_registro').insert(payload);
+      if (error) { console.error('Erro ao salvar certidão:', error); return false; }
+      return true;
+    } catch (err) {
+      console.error('Erro ao salvar certidão:', err);
+      return false;
+    }
+  },
+
   assumirLogmein: (alvo, ator) => { 
     const state = get(); const agora = new Date().toISOString();
     get()._saveLogmeinToDb({ ...state.logmein, emUso: true, consultor: alvo, assumidoEm: agora }); 
     get().adicionarMensagemMural(`${ator} assumiu o LogMeIn.`, 'logmein', ator); 
   },
-  liberarLogmein: (_alvo, ator) => { 
+  liberarLogmein: (alvo, ator) => { 
     const state = get(); let tempoExtra = '';
     if (state.logmein.assumidoEm) {
         const minutos = Math.max(1, Math.round((new Date().getTime() - new Date(state.logmein.assumidoEm).getTime()) / 60000));

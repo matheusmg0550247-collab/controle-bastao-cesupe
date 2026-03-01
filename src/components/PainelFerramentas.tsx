@@ -1,15 +1,7 @@
-import { TJMG_HEADER_B64 } from '../assets/tjmgHeader'
 import { useState } from 'react'
 import { useBastaoStore } from '../store/useBastaoStore'
-import { Document, Packer, Paragraph, TextRun, AlignmentType, Header, ImageRun } from 'docx'
+import { Document, Packer, Paragraph, TextRun, AlignmentType } from 'docx'
 import { saveAs } from 'file-saver'
-
-function b64ToUint8(b64: string): Uint8Array {
-  const bin = atob(b64);
-  const arr = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-  return arr;
-}
 
 export function PainelFerramentas() {
   const { meuLogin, enviarRegistroN8n, salvarCertidaoSupabase } = useBastaoStore()
@@ -17,14 +9,20 @@ export function PainelFerramentas() {
   const [loading, setLoading] = useState(false)
 
   const hoje = new Date().toISOString().split('T')[0]
-  const formatarDataBR = (dataIso: string) => { if (!dataIso) return ''; const [ano, mes, dia] = dataIso.split('-'); return `${dia}/${mes}/${ano}`; }
+  const formatarDataBR = (dataIso: string) => {
+    if (!dataIso) return '';
+    const [ano, mes, dia] = dataIso.split('-');
+    return `${dia}/${mes}/${ano}`;
+  }
 
+  // Estados dos Formulários
   const [sugestaoTexto, setSugestaoTexto] = useState('')
   const [chamadoTexto, setChamadoTexto] = useState('')
   const [erroTitulo, setErroTitulo] = useState('')
   const [erroObjetivo, setErroObjetivo] = useState('')
   const [erroRelato, setErroRelato] = useState('')
   const [erroResultado, setErroResultado] = useState('')
+
   const [atdData, setAtdData] = useState(hoje)
   const [atdUsuario, setAtdUsuario] = useState('Cartório')
   const [atdSetor, setAtdSetor] = useState('')
@@ -33,15 +31,19 @@ export function PainelFerramentas() {
   const [atdCanal, setAtdCanal] = useState('Presencial')
   const [atdDesfecho, setAtdDesfecho] = useState('Resolvido - Cesupe')
   const [atdJira, setAtdJira] = useState('')
-  const usuarioOptions = ["Cartório", "Gabinete", "Público Externo", "Interno", "Outros"]
-  const sistemaOptions = ["Eproc", "JPE", "PJe", "SEI", "Conveniados", "Themis", "Outros"]
+
+  const usuarioOptions = ["Cartório", "Magistrado", "Público Externo", "Interno", "Outros"]
+  const sistemaOptions = ["Eproc", "JPE", "PJe", "SEI", "Conveniados", "Outros"]
   const canalOptions = ["Whatsapp", "Telefone", "Presencial", "E-mail", "Jira", "Outros"]
   const desfechoOptions = ["Resolvido - Cesupe", "Encaminhado N2", "Encaminhado N3", "Aguardando Usuário", "Outros"]
+
   const [heData, setHeData] = useState(hoje)
   const [heInicio, setHeInicio] = useState('')
   const [heTempoTotal, setHeTempoTotal] = useState('')
   const [heMotivo, setHeMotivo] = useState('')
-  const [certData, setCertData] = useState(hoje)
+
+  // ESTADOS DA CERTIDÃO
+  const [certDatas, setCertDatas] = useState<string[]>([hoje])
   const [certTipo, setCertTipo] = useState('Geral')
   const [certMotivo, setCertMotivo] = useState('')
   const [certProcesso, setCertProcesso] = useState('')
@@ -55,14 +57,26 @@ export function PainelFerramentas() {
 
   const dispararN8n = async (tipo: string, dados: any, mensagemFormatada: string, resetFn: () => void) => {
     setLoading(true)
-    const sucesso = await enviarRegistroN8n(tipo, dados, mensagemFormatada)
-    setLoading(false)
-    if (sucesso) { alert(`✅ ${tipo} registrado com sucesso!`); setModalAberto(null); resetFn(); }
-    else { alert("❌ Falha ao enviar para o n8n."); }
+    try {
+      const sucesso = await enviarRegistroN8n(tipo, dados, mensagemFormatada)
+      if (sucesso) {
+        alert(`✅ ${tipo} registrado com sucesso!`)
+        setModalAberto(null)
+        resetFn()
+      } else {
+        alert("❌ Falha ao enviar para o n8n. Verifique a configuração.")
+      }
+    } catch (err) {
+      console.error('Erro no dispararN8n:', err)
+      alert("❌ Erro inesperado ao enviar. Verifique o console.")
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const criarBlobDocx = async () => {
-    const dataFormatada = formatarDataBR(certData);
+  // MOTOR GERADOR DE WORD
+  const criarBlobDocx = async (dataParaDoc: string) => {
+    const dataFormatada = formatarDataBR(dataParaDoc);
     let paragrafosCorpo: Paragraph[] = [];
 
     if (certTipo === 'Física') {
@@ -85,28 +99,14 @@ export function PainelFerramentas() {
       ];
     }
 
-    const headerTJMG = new Header({
-      children: [
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          children: [
-            new ImageRun({
-              data: b64ToUint8(TJMG_HEADER_B64),
-              transformation: { width: 450, height: 106 },
-              type: 'jpg',
-            }),
-          ],
-        }),
-      ],
-    });
-
     const doc = new Document({
       sections: [{
-        headers: { default: headerTJMG },
         children: [
-          new Paragraph({ text: "", spacing: { before: 200, after: 200 } }),
+          new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: "PODER JUDICIÁRIO DO ESTADO DE MINAS GERAIS", bold: true, size: 24 })] }),
+          new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: "TRIBUNAL DE JUSTIÇA", bold: true, size: 24 })] }),
+          new Paragraph({ text: "", spacing: { after: 400 } }),
           new Paragraph({ children: [new TextRun({ text: "Parecer Técnico GEJUD/DIRTEC/TJMG", bold: true, size: 24 })], spacing: { after: 100 } }),
-          new Paragraph({ children: [new TextRun({ text: "Assunto: Notifica erro no \u201CJPe \u2013 2ª Instância\u201D ao peticionar.", bold: true, size: 24 })], spacing: { after: 400 } }),
+          new Paragraph({ children: [new TextRun({ text: "Assunto: Notifica erro no “JPe – 2ª Instância” ao peticionar.", bold: true, size: 24 })], spacing: { after: 400 } }),
           new Paragraph({ children: [new TextRun({ text: `Belo Horizonte, ${new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}`, size: 24 })], spacing: { after: 400 } }),
           new Paragraph({ children: [new TextRun({ text: "Exmo(a). Senhor(a) Relator(a),", size: 24 })], spacing: { after: 200 } }),
           ...paragrafosCorpo,
@@ -124,31 +124,75 @@ export function PainelFerramentas() {
 
   const handleGerarWord = async () => {
     if (!certProcesso) return alert("Preencha ao menos o número do processo!")
-    try { const blob = await criarBlobDocx(); saveAs(blob, `Certidao_${certProcesso.replace(/[^a-zA-Z0-9]/g, '')}.docx`); }
-    catch (error) { console.error(error); alert("❌ Erro ao gerar Word."); }
+    try {
+      for (const data of certDatas) {
+        const blob = await criarBlobDocx(data);
+        const dataSufixo = data.replace(/-/g, '');
+        saveAs(blob, `Certidao_${certProcesso.replace(/[^a-zA-Z0-9]/g, '')}_${dataSufixo}.docx`);
+      }
+    } catch (error) { alert("❌ Erro ao gerar Word."); }
   }
 
   const handleSalvarENotificar = async () => {
     if (!certProcesso) return alert("Preencha ao menos o número do processo!")
     setLoading(true)
+
     try {
-      const payloadSupabase = { processo: certProcesso, nome_parte: certParte, consultor: meuLogin, data: certData, tipo: certTipo, peticao: certPeticao, incidente: certIncidente, motivo: certMotivo };
-      const salvoNoBanco = await salvarCertidaoSupabase(payloadSupabase);
-      if (!salvoNoBanco) throw new Error("Falha ao salvar no banco");
-      const blob = await criarBlobDocx();
-      const base64: string = await new Promise((resolve) => { const reader = new FileReader(); reader.onloadend = () => resolve(reader.result as string); reader.readAsDataURL(blob); });
-      const payloadN8n = { ...payloadSupabase, arquivo_docx_base64: base64 };
-      const msg = `🖨️ **Certidão Gerada**\n👤 **Autor:** ${meuLogin}\n📄 **Processo:** ${certProcesso}\n🏷️ **Tipo:** ${certTipo}`;
+      let todosSalvos = true;
+
+      for (const data of certDatas) {
+        const payloadSupabase = {
+          processo: certProcesso,
+          nome_parte: certParte,
+          consultor: meuLogin,
+          data, 
+          tipo: certTipo,
+          peticao: certPeticao,
+          incidente: certIncidente,
+          motivo: certMotivo
+        };
+        
+        const salvoNoBanco = await salvarCertidaoSupabase(payloadSupabase);
+        if (!salvoNoBanco) { todosSalvos = false; continue; }
+      }
+
+      if (!todosSalvos) throw new Error("Falha ao salvar uma ou mais certidões no banco");
+
+      // Gera Word da primeira data (referência)
+      const blob = await criarBlobDocx(certDatas[0]);
+      
+      // Converte o arquivo para Base64
+      const base64: string = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(blob);
+      });
+
+      const datasFormatadas = certDatas.map(d => formatarDataBR(d)).join(', ');
+      const payloadN8n = { processo: certProcesso, nome_parte: certParte, consultor: meuLogin, datas: certDatas, tipo: certTipo, peticao: certPeticao, incidente: certIncidente, motivo: certMotivo, arquivo_docx_base64: base64 };
+      const msg = `🖨️ **Certidão Gerada**\n👤 **Autor:** ${meuLogin}\n📄 **Processo:** ${certProcesso}\n🏷️ **Tipo:** ${certTipo}\n📅 **Datas:** ${datasFormatadas} (${certDatas.length} dia(s))`;
+      
       const n8nSucesso = await enviarRegistroN8n("CERTIDAO", payloadN8n, msg);
-      if (n8nSucesso) { alert("✅ Certidão salva e enviada!"); setModalAberto(null); setCertProcesso(''); setCertMotivo(''); setCertIncidente(''); setCertParte(''); }
-      else { alert("⚠️ Salvo no banco, mas falhou no n8n."); }
-    } catch (error) { console.error(error); alert("❌ Erro. Verifique o console."); }
-    finally { setLoading(false); }
+      
+      if (n8nSucesso) {
+        alert(`✅ ${certDatas.length} certidão(ões) salva(s) no Supabase e enviada(s) para o n8n!`);
+        setModalAberto(null);
+        setCertProcesso(''); setCertMotivo(''); setCertIncidente(''); setCertParte(''); setCertDatas([hoje]);
+      } else {
+        alert("⚠️ Salvo no banco, mas falhou ao enviar pro n8n.");
+      }
+    } catch (error) {
+      console.error(error);
+      alert("❌ Ocorreu um erro na operação. Verifique o console.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
     <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 relative">
       <h2 className="text-xl font-bold mb-4 text-gray-800 border-b pb-2">🛠️ Ferramentas da Equipe</h2>
+      
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
         <button onClick={() => setModalAberto('chamados')} className={btnClass}>🆘 Chamados</button>
         <button onClick={() => setModalAberto('atendimentos')} className={btnClass}>📝 Atendimentos</button>
@@ -160,10 +204,12 @@ export function PainelFerramentas() {
         <button onClick={() => setModalAberto('sugestao')} className={btnClass}>💡 Sugestão</button>
       </div>
 
+      {/* --- MODAIS DE FERRAMENTAS --- */}
+
       {modalAberto === 'sugestao' && (
         <div className="fixed inset-0 z-50 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl p-6 border border-gray-200">
-            <h3 className="text-xl font-extrabold text-gray-800 mb-4">💡 Enviar Sugestão</h3>
+            <h3 className="text-xl font-extrabold text-gray-800 mb-4 flex items-center gap-2">💡 Enviar Sugestão</h3>
             <textarea value={sugestaoTexto} onChange={(e) => setSugestaoTexto(e.target.value)} className={`${inputClass} h-32 resize-none focus:ring-yellow-500`} placeholder="Descreva sua sugestão..." />
             <div className="flex gap-2 mt-4">
               <button disabled={loading || !sugestaoTexto} onClick={() => dispararN8n("SUGESTAO", { texto: sugestaoTexto }, `💡 **Nova Sugestão**\n👤 **Autor:** ${meuLogin}\n\n📝 **Sugestão:**\n${sugestaoTexto}`, () => setSugestaoTexto(''))} className="flex-1 bg-yellow-500 text-white font-bold py-3 rounded-xl shadow-md disabled:opacity-50">Enviar</button>
@@ -189,7 +235,7 @@ export function PainelFerramentas() {
       {modalAberto === 'erro_novidade' && (
         <div className="fixed inset-0 z-50 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl p-6 border border-gray-200 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-xl font-extrabold text-emerald-600 mb-4">🐛 Erro/Novidade</h3>
+            <h3 className="text-xl font-extrabold text-emerald-600 mb-4 flex items-center gap-2">🐛 Erro/Novidade</h3>
             <label className={labelClass}>Título:</label>
             <input type="text" value={erroTitulo} onChange={(e) => setErroTitulo(e.target.value)} className={`${inputClass} focus:ring-emerald-500`} />
             <label className={labelClass}>Objetivo:</label>
@@ -209,7 +255,7 @@ export function PainelFerramentas() {
       {modalAberto === 'atendimentos' && (
         <div className="fixed inset-0 z-50 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl p-6 border border-gray-200 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-xl font-extrabold text-blue-600 mb-4">📝 Registro de Atendimentos</h3>
+            <h3 className="text-xl font-extrabold text-blue-600 mb-4 flex items-center gap-2">📝 Registro de Atendimentos</h3>
             <label className={labelClass}>Data:</label>
             <input type="date" value={atdData} onChange={(e) => setAtdData(e.target.value)} className={`${inputClass} focus:ring-blue-500`} />
             <label className={labelClass}>Usuário:</label>
@@ -237,12 +283,12 @@ export function PainelFerramentas() {
       {modalAberto === 'hextras' && (
         <div className="fixed inset-0 z-50 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl p-6 border border-gray-200">
-            <h3 className="text-xl font-extrabold text-orange-600 mb-4">⏰ Horas Extras</h3>
+            <h3 className="text-xl font-extrabold text-orange-600 mb-4 flex items-center gap-2">⏰ Horas Extras</h3>
             <label className={labelClass}>Data:</label>
             <input type="date" value={heData} onChange={(e) => setHeData(e.target.value)} className={`${inputClass} focus:ring-orange-500`} />
             <label className={labelClass}>Início:</label>
             <input type="time" value={heInicio} onChange={(e) => setHeInicio(e.target.value)} className={`${inputClass} focus:ring-orange-500`} />
-            <label className={labelClass}>Tempo Total:</label>
+            <label className={labelClass}>Tempo Total (Mins ou Horas):</label>
             <input type="text" value={heTempoTotal} onChange={(e) => setHeTempoTotal(e.target.value)} className={`${inputClass} focus:ring-orange-500`} placeholder="Ex: 45 min, 1h30m..." />
             <label className={labelClass}>Motivo:</label>
             <input type="text" value={heMotivo} onChange={(e) => setHeMotivo(e.target.value)} className={`${inputClass} focus:ring-orange-500`} />
@@ -257,49 +303,83 @@ export function PainelFerramentas() {
       {modalAberto === 'certidao' && (
         <div className="fixed inset-0 z-50 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl p-6 border border-gray-200 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-2xl font-extrabold text-indigo-700 mb-6">🖨️ Registro de Certidão (2026)</h3>
-            <label className={labelClass}>Data do Evento:</label>
-            <input type="date" value={certData} onChange={(e) => setCertData(e.target.value)} className={`${inputClass} mb-3 focus:ring-indigo-500`} />
+            <h3 className="text-2xl font-extrabold text-indigo-700 mb-6 flex items-center gap-2">🖨️ Registro de Certidão (2026)</h3>
+            
+            <label className={labelClass}>Data(s) do Evento:</label>
+            <div className="flex flex-col gap-2 mb-3">
+              {certDatas.map((d, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <input type="date" value={d} onChange={(e) => { const novas = [...certDatas]; novas[i] = e.target.value; setCertDatas(novas); }} className={`${inputClass} flex-1 focus:ring-indigo-500`} />
+                  {certDatas.length > 1 && (
+                    <button type="button" onClick={() => setCertDatas(certDatas.filter((_, idx) => idx !== i))} className="text-red-500 hover:text-red-700 font-black text-xl px-2" title="Remover data">✕</button>
+                  )}
+                </div>
+              ))}
+              <button type="button" onClick={() => setCertDatas([...certDatas, hoje])} className="self-start text-sm font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 mt-1">
+                ➕ Adicionar outra data
+              </button>
+            </div>
+            
             <label className={labelClass}>Tipo do Modelo:</label>
             <select value={certTipo} onChange={(e) => setCertTipo(e.target.value)} className={`${inputClass} mb-3 focus:ring-indigo-500 font-bold text-indigo-800`}>
               <option value="Geral">Geral (Indisponibilidade)</option>
               <option value="Física">Física (Recomenda autos físicos)</option>
               <option value="Eletrônica">Eletrônica (Peticionamento comum)</option>
             </select>
-            <label className={labelClass}>Motivo/Detalhes:</label>
-            <textarea value={certMotivo} onChange={(e) => setCertMotivo(e.target.value)} className={`${inputClass} h-20 mb-3 focus:ring-indigo-500 resize-none`} placeholder="Detalhes do erro..." />
+            
+            <label className={labelClass}>Motivo/Detalhes (Necessário para a certidão "Geral"):</label>
+            <textarea value={certMotivo} onChange={(e) => setCertMotivo(e.target.value)} className={`${inputClass} h-20 mb-3 focus:ring-indigo-500 resize-none`} placeholder="Detalhes do erro, ex: superior a uma hora, a partir de 20:30h..." />
+
             <div className="grid grid-cols-2 gap-4 mb-3">
-              <div><label className={labelClass}>Processo:</label><input type="text" value={certProcesso} onChange={(e) => setCertProcesso(e.target.value)} className={`${inputClass} focus:ring-indigo-500`} placeholder="5001234-56..." /></div>
-              <div><label className={labelClass}>Incidente/Chamado:</label><input type="text" value={certIncidente} onChange={(e) => setCertIncidente(e.target.value)} className={`${inputClass} focus:ring-indigo-500`} placeholder="CH321..." /></div>
+              <div>
+                <label className={labelClass}>Processo (Com pontuação):</label>
+                <input type="text" value={certProcesso} onChange={(e) => setCertProcesso(e.target.value)} className={`${inputClass} focus:ring-indigo-500`} placeholder="Ex: 5001234-56..." />
+              </div>
+              <div>
+                <label className={labelClass}>Incidente/Chamado:</label>
+                <input type="text" value={certIncidente} onChange={(e) => setCertIncidente(e.target.value)} className={`${inputClass} focus:ring-indigo-500`} placeholder="Ex: CH321..." />
+              </div>
             </div>
+
             <div className="grid grid-cols-2 gap-4 mb-6">
-              <div><label className={labelClass}>Nome da Parte/Advogado:</label><input type="text" value={certParte} onChange={(e) => setCertParte(e.target.value)} className={`${inputClass} focus:ring-indigo-500`} /></div>
-              <div><label className={labelClass}>Tipo de Petição:</label><select value={certPeticao} onChange={(e) => setCertPeticao(e.target.value)} className={`${inputClass} focus:ring-indigo-500`}><option value="Inicial">Inicial</option><option value="Recursal">Recursal</option><option value="Intermediária">Intermediária</option></select></div>
+              <div>
+                <label className={labelClass}>Nome da Parte/Advogado:</label>
+                <input type="text" value={certParte} onChange={(e) => setCertParte(e.target.value)} className={`${inputClass} focus:ring-indigo-500`} placeholder="Nome completo..." />
+              </div>
+              <div>
+                <label className={labelClass}>Tipo de Petição:</label>
+                <select value={certPeticao} onChange={(e) => setCertPeticao(e.target.value)} className={`${inputClass} focus:ring-indigo-500`}>
+                  <option value="Inicial">Inicial</option>
+                  <option value="Recursal">Recursal</option>
+                  <option value="Intermediária">Intermediária</option>
+                </select>
+              </div>
             </div>
+
             <div className="flex gap-4">
-              <button onClick={handleGerarWord} className="flex-1 bg-white border-2 border-gray-200 hover:bg-gray-50 text-gray-700 font-bold py-4 rounded-xl shadow-sm active:scale-95">📄 Apenas Baixar Word</button>
-              <button disabled={loading} onClick={handleSalvarENotificar} className="flex-[2] bg-[#FF4B4B] hover:bg-red-600 text-white font-bold py-4 rounded-xl shadow-md active:scale-95 disabled:opacity-50">{loading ? 'Salvando...' : '💾 Salvar e Mandar pro n8n'}</button>
+              <button 
+                onClick={handleGerarWord} 
+                className="flex-1 bg-white border-2 border-gray-200 hover:bg-gray-50 text-gray-700 font-bold py-4 rounded-xl shadow-sm transition-transform active:scale-95 flex items-center justify-center gap-2"
+              >
+                📄 Apenas Baixar Word
+              </button>
+              
+              <button 
+                disabled={loading} 
+                onClick={handleSalvarENotificar} 
+                className="flex-[2] bg-[#FF4B4B] hover:bg-red-600 text-white font-bold py-4 rounded-xl shadow-md transition-transform active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {loading ? 'Salvando...' : '💾 Salvar e Mandar pro n8n'}
+              </button>
             </div>
-            <button onClick={() => setModalAberto(null)} className="mt-4 px-6 py-2 bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-lg font-bold text-sm border border-gray-300">❌ Cancelar</button>
+            
+            <button onClick={() => setModalAberto(null)} className="mt-4 px-6 py-2 bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-lg font-bold text-sm transition-colors border border-gray-300">
+              ❌ Cancelar
+            </button>
           </div>
         </div>
       )}
 
-      {(meuLogin === 'Pablo Mol' || meuLogin === 'Leandro') && (
-        <div className="mt-6 bg-gradient-to-br from-emerald-50 to-teal-50 p-5 rounded-2xl border-2 border-emerald-200">
-          <h3 className="text-lg font-black text-emerald-800 mb-3">📎 Enviar PDF para Triagem</h3>
-          <p className="text-xs text-emerald-600 mb-4">Anexe um PDF para triagem via n8n.</p>
-          <input type="file" accept=".pdf" id="pdf-triagem" className="hidden" onChange={async (e) => {
-            const file = e.target.files?.[0]; if (!file) return;
-            if (!file.name.endsWith('.pdf')) { alert('⚠️ Apenas PDF.'); return; }
-            if (file.size > 10 * 1024 * 1024) { alert('⚠️ Máx 10MB.'); return; }
-            const fd = new FormData(); fd.append('file', file); fd.append('consultor', meuLogin || ''); fd.append('data_envio', new Date().toISOString()); fd.append('nome_arquivo', file.name);
-            try { await fetch('https://matheusgomes12.app.n8n.cloud/webhook/b23e961a-3cd1-4a3e-8677-dc78c8bd0e73', { method: 'POST', body: fd }); alert(`✅ "${file.name}" enviado!`); } catch { alert('✅ PDF enviado!'); }
-            e.target.value = '';
-          }} />
-          <button onClick={() => document.getElementById('pdf-triagem')?.click()} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-6 rounded-xl shadow-md active:scale-95">📄 Selecionar e Enviar PDF</button>
-        </div>
-      )}
     </div>
   )
 }

@@ -1,56 +1,34 @@
 import { useState } from 'react'
 import { useBastaoStore } from '../store/useBastaoStore'
-import { getRamal, USUARIOS_SISTEMA } from '../constants'
+import { getRamal, USUARIOS_SISTEMA, getConsultorDisplayName } from '../constants'
 
 export function PainelBastao() {
   const { filaEproc, filaJpe, skipFlags, quickIndicators, statusTexto, updateStatus, meuLogin } = useBastaoStore()
   const [ramalPopover, setRamalPopover] = useState<string | null>(null)
-  const [modalAberto, setModalAberto] = useState(false)
-  const [modalAlvo, setModalAlvo] = useState('')
 
-  const handleCliqueNome = (nome: string) => {
-    const usuarioLogado = USUARIOS_SISTEMA.find(u => u.nome === meuLogin)
-    const isSecretaria = usuarioLogado?.perfil === 'Secretaria' || usuarioLogado?.perfil === 'Gestor'
-
+  const handleRemoverDaFila = (nome: string) => {
+    const usuarioLogado = USUARIOS_SISTEMA.find(u => u.nome === meuLogin);
+    const isSecretaria = usuarioLogado?.perfil === 'Secretaria' || usuarioLogado?.perfil === 'Gestor';
+    
     if (!isSecretaria && meuLogin !== nome) {
       const confirmar = window.confirm(
         `⚠️ AUDITORIA\n\nVocê está removendo ${nome} do Bastão.\nEsta ação será registrada no banco de dados em seu nome (${meuLogin}).\n\nDeseja continuar?`
-      )
-      if (!confirmar) return
+      );
+      if (!confirmar) return;
     }
-
-    const status = statusTexto[nome] || ''
-
-    // Se tem status ativo (não vazio, não Indisponível) → mostra modal
-    if (status && status !== 'Indisponível' && status !== 'Com o Bastão') {
-      setModalAlvo(nome)
-      setModalAberto(true)
-      return
-    }
-
-    // Senão → remove direto
-    updateStatus(nome, 'Indisponível', false, '')
+    updateStatus(nome, 'Indisponível', false, '');
   }
 
-  const handleEscolhaModal = (escolha: 'bastao' | 'indisponivel') => {
-    if (escolha === 'bastao') {
-      updateStatus(modalAlvo, '', true)
-    } else {
-      updateStatus(modalAlvo, 'Indisponível', false)
-    }
-    setModalAberto(false)
-    setModalAlvo('')
-  }
-
+  // Retorna o emoji do status se for Atividades ou Projeto
   const getStatusEmoji = (nome: string) => {
-    const status = statusTexto[nome]
-    if (status === 'Atividades') return '📋'
-    if (status === 'Projeto') return '🏗️'
-    return null
+    const status = statusTexto[nome];
+    if (status === 'Atividades') return '📋';
+    if (status === 'Projeto') return '🏗️';
+    return null;
   }
 
   const renderFila = (titulo: string, fila: string[], isEproc: boolean) => {
-    const corTema = isEproc ? 'orange' : 'blue'
+    const corTema = isEproc ? 'orange' : 'blue';
     return (
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex-1">
         <h2 className={`text-xl font-black text-${corTema}-600 mb-6 flex items-center gap-2 border-b border-${corTema}-100 pb-2`}>
@@ -60,12 +38,13 @@ export function PainelBastao() {
         <div className="mb-6">
           <p className="text-[10px] font-black text-gray-400 tracking-wider mb-2 uppercase">Com o Bastão:</p>
           {fila.length > 0 ? (
-            <div onClick={() => handleCliqueNome(fila[0])} className={`border-2 border-${corTema}-400 bg-${corTema}-50 p-4 rounded-xl flex justify-between items-center shadow-md cursor-pointer hover:bg-${corTema}-100 transition-colors group`} title="Clique para remover da fila">
+            <div onClick={() => handleRemoverDaFila(fila[0])} className={`border-2 border-${corTema}-400 bg-${corTema}-50 p-4 rounded-xl flex justify-between items-center shadow-md cursor-pointer hover:bg-${corTema}-100 transition-colors group`} title="Clique para remover da fila">
               <div className="flex items-center gap-3">
                 <span className="text-3xl">🔥</span>
                 <span className={`text-2xl font-black text-${corTema}-600 group-hover:text-${corTema}-800`}>
-                  {fila[0]}
+                  {getConsultorDisplayName(fila[0])}
                 </span>
+                {/* Emoji de status (Atividades/Projeto) */}
                 {getStatusEmoji(fila[0]) && (
                   <span className="text-xl" title={statusTexto[fila[0]]}>{getStatusEmoji(fila[0])}</span>
                 )}
@@ -93,10 +72,11 @@ export function PainelBastao() {
           {fila.length > 1 ? (
             <div className="flex flex-col gap-2">
               {fila.slice(1).map((nome, index) => (
-                <div key={nome} onClick={() => handleCliqueNome(nome)} className="bg-gray-50 border border-gray-200 p-3 rounded-xl flex justify-between items-center cursor-pointer hover:bg-red-50 hover:border-red-200 transition-colors group" title="Clique para remover da fila">
+                <div key={nome} onClick={() => handleRemoverDaFila(nome)} className="bg-gray-50 border border-gray-200 p-3 rounded-xl flex justify-between items-center cursor-pointer hover:bg-red-50 hover:border-red-200 transition-colors group" title="Clique para remover da fila">
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-black text-gray-400 bg-white px-2 py-1 rounded-md shadow-sm border border-gray-100">{index + 2}º</span>
-                    <span className="font-bold text-gray-700 group-hover:text-red-700">{nome}</span>
+                    <span className="font-bold text-gray-700 group-hover:text-red-700">{getConsultorDisplayName(nome)}</span>
+                    {/* Emoji de status (Atividades/Projeto) */}
                     {getStatusEmoji(nome) && (
                       <span className="text-sm" title={statusTexto[nome]}>{getStatusEmoji(nome)}</span>
                     )}
@@ -139,29 +119,6 @@ export function PainelBastao() {
             <p className="text-2xl font-black text-gray-800 mb-4">{ramalPopover}</p>
             <div className="bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-2xl px-10 py-5 shadow-lg">
               <p className="text-5xl font-black tracking-wider">☎ {getRamal(ramalPopover)}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal: Voltar ao Bastão ou Ficar Indisponível */}
-      {modalAberto && (
-        <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl">
-            <h3 className="text-lg font-black text-gray-800 mb-2 text-center">O que deseja fazer?</h3>
-            <p className="text-sm text-gray-500 text-center mb-6">
-              <span className="font-bold text-indigo-600">{modalAlvo}</span> está em <span className="font-bold">{statusTexto[modalAlvo]}</span>.
-            </p>
-            <div className="flex flex-col gap-3">
-              <button onClick={() => handleEscolhaModal('bastao')} className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-4 rounded-xl shadow-sm active:scale-95 transition-all text-base flex items-center justify-center gap-2">
-                🔄 Voltar ao Bastão
-              </button>
-              <button onClick={() => handleEscolhaModal('indisponivel')} className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-4 rounded-xl shadow-sm active:scale-95 transition-all text-base flex items-center justify-center gap-2">
-                🚫 Ficar Indisponível
-              </button>
-              <button onClick={() => { setModalAberto(false); setModalAlvo(''); }} className="w-full bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-3 rounded-xl transition-all text-sm">
-                Cancelar
-              </button>
             </div>
           </div>
         </div>
