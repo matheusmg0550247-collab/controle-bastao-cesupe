@@ -1,18 +1,21 @@
 export const EQUIPE_EPROC = [
   "Barbara Mara", "Bruno Glaicon", "Claudia Luiza", "Douglas Paiva", "Fábio Alves",
-  "Glayce Torres", "Isabela Dias", "Isac Candido", "Ivana Guimarães", "Leonardo Damaceno",
+  "Glayce Torres", "Isabela Dias", "Isac Candido", "Ivana Guimarães", "Jonatas", "Leonardo Damaceno",
   "Marcelo Pena Guerra", "Michael Douglas", "Morôni", "Pablo Mol", "Ranyer Segal",
   "Sarah Leal", "Victoria Lisboa"
 ].sort();
 
 export const EQUIPE_JPE = [
   "Alex Paulo", "Dirceu Gonçalves", "Douglas De Souza", "Farley", "Gleis",
-  "Hugo Leonardo", "Igor Dayrell", "Jerry Marcos", "Jonatas", "Leandro",
+  "Hugo Leonardo", "Igor Dayrell", "Jerry Marcos", "Leandro",
   "Luiz Henrique", "Marcelo dos Santos Dutra", "Marina Marques",
   "Marina Torres", "Vanessa Ligiane"
 ].sort();
 
 export const TODOS_CONSULTORES = [...EQUIPE_EPROC, ...EQUIPE_JPE].sort();
+
+// Consultores escalados para Triagem HP
+export const TRIAGEM_HP = ["Pablo Mol", "Leandro"];
 
 export const RAMAIS: Record<string, string> = {
   "Alex": "2650", "Barbara": "4201", "Bruno": "2644", "Claudia": "2667",
@@ -34,20 +37,22 @@ export const RAMAIS: Record<string, string> = {
 export interface UsuarioSistema {
   nome: string;
   perfil: 'Gestor' | 'Secretaria' | 'Consultor';
+  equipe: 'Gestão' | 'Projetos' | 'Secretaria' | 'Eproc' | 'Legados';
 }
 
 export const USUARIOS_SISTEMA: UsuarioSistema[] = [
-  // Gestores
-  { nome: 'Matheus', perfil: 'Gestor' },
-  { nome: 'Gilberto', perfil: 'Gestor' },
-  // Secretárias / Projetos
-  { nome: 'Juliana', perfil: 'Secretaria' },
-  { nome: 'Brenda', perfil: 'Secretaria' },
-  { nome: 'Larissa', perfil: 'Secretaria' },
+  // Gestão
+  { nome: 'Matheus', perfil: 'Gestor', equipe: 'Gestão' },
+  { nome: 'Gilberto', perfil: 'Gestor', equipe: 'Gestão' },
+  // Projetos
+  { nome: 'Juliana', perfil: 'Gestor', equipe: 'Projetos' },
+  // Secretaria Cesupe
+  { nome: 'Brenda', perfil: 'Secretaria', equipe: 'Secretaria' },
+  { nome: 'Larissa', perfil: 'Secretaria', equipe: 'Secretaria' },
   // Consultores EPROC
-  ...EQUIPE_EPROC.map(nome => ({ nome, perfil: 'Consultor' as const })),
-  // Consultores JPE
-  ...EQUIPE_JPE.map(nome => ({ nome, perfil: 'Consultor' as const })),
+  ...EQUIPE_EPROC.map(nome => ({ nome, perfil: 'Consultor' as const, equipe: 'Eproc' as const })),
+  // Consultores JPE (Legados)
+  ...EQUIPE_JPE.map(nome => ({ nome, perfil: 'Consultor' as const, equipe: 'Legados' as const })),
 ];
 
 // Função auxiliar para buscar o ramal: tenta o nome completo, se não achar, tenta o primeiro nome

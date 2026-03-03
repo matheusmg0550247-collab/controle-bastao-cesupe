@@ -1,18 +1,21 @@
 export const EQUIPE_EPROC = [
   "Barbara Mara", "Bruno Glaicon", "Claudia Luiza", "Douglas Paiva", "Fábio Alves",
-  "Glayce Torres", "Isabela Dias", "Isac Candido", "Ivana Guimarães", "Leonardo Damaceno",
+  "Glayce Torres", "Isabela Dias", "Isac Candido", "Ivana Guimarães", "Jonatas", "Leonardo Damaceno",
   "Marcelo Pena Guerra", "Michael Douglas", "Morôni", "Pablo Mol", "Ranyer Segal",
   "Sarah Leal", "Victoria Lisboa"
 ].sort();
 
 export const EQUIPE_JPE = [
   "Alex Paulo", "Dirceu Gonçalves", "Douglas De Souza", "Farley", "Gleis",
-  "Hugo Leonardo", "Igor Dayrell", "Jerry Marcos", "Jonatas", "Leandro",
+  "Hugo Leonardo", "Igor Dayrell", "Jerry Marcos", "Leandro",
   "Luiz Henrique", "Marcelo dos Santos Dutra", "Marina Marques",
   "Marina Torres", "Vanessa Ligiane"
 ].sort();
 
 export const TODOS_CONSULTORES = [...EQUIPE_EPROC, ...EQUIPE_JPE].sort();
+
+// Consultores escalados para Triagem HP
+export const TRIAGEM_HP = ["Pablo Mol", "Leandro"];
 
 export const RAMAIS: Record<string, string> = {
   "Alex": "2650", "Barbara": "4201", "Bruno": "2644", "Claudia": "2667",
