@@ -11,6 +11,7 @@ import { PainelGerencial } from './components/PainelGerencial'
 import { PainelSessoes } from './components/PainelSessoes'
 import { LojinhaVirtual } from './components/LojinhaVirtual'
 import { LojinhaRashid } from './components/LojinhaRashid'
+import { TriagemBastao } from './components/TriagemBastao'
 import { Login } from './components/Login'
 import { useBastaoStore } from './store/useBastaoStore'
 import { USUARIOS_SISTEMA, getRamal } from './constants'
@@ -71,6 +72,7 @@ function App() {
               <div className="xl:col-span-1 flex flex-col gap-6">
                 <PainelEquipe />
                 <BotaoDicasDiarias />
+                <TriagemBastao />
                 <PainelMural />
               </div>
             </div>
@@ -88,6 +90,7 @@ function App() {
                 <PainelLogmein />
                 <PainelFerramentas />
                 <BotaoDicasDiarias />
+                <TriagemBastao />
               </div>
               <div className="flex flex-col gap-6">
                 <PainelAcoes />

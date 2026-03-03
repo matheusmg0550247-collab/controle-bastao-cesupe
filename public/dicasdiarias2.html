@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Dica da Semana - EPROC | CESUPE</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Baloo+2:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --primary: #1a5276;
+    --primary-light: #2980b9;
+    --primary-dark: #0e3a56;
+    --accent: #e67e22;
+    --accent-light: #f39c12;
+    --bg-light: #eaf2f8;
+    --bg-card: #ffffff;
+    --text-dark: #2c3e50;
+    --text-medium: #5d6d7e;
+    --text-light: #85929e;
+    --cesupe-blue: #1b4f72;
+    --cesupe-teal: #1abc9c;
+    --shadow-soft: 0 4px 20px rgba(26, 82, 118, 0.12);
+    --shadow-medium: 0 8px 32px rgba(26, 82, 118, 0.18);
+    --shadow-strong: 0 12px 48px rgba(26, 82, 118, 0.25);
+    --radius: 16px;
+    --radius-lg: 24px;
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    font-family: 'Nunito', sans-serif;
+    background: var(--bg-light);
+    color: var(--text-dark);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* === BACKGROUND PATTERN === */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background:
+      radial-gradient(circle at 20% 20%, rgba(26, 188, 156, 0.06) 0%, transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(41, 128, 185, 0.06) 0%, transparent 50%),
+      radial-gradient(circle at 50% 50%, rgba(230, 126, 34, 0.03) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* === HEADER === */
+  .header {
+    background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 50%, var(--primary-light) 100%);
+    padding: 28px 24px 80px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .header::after {
+    content: '';
+    position: absolute;
+    bottom: -2px; left: 0; right: 0;
+    height: 60px;
+    background: var(--bg-light);
+    border-radius: 50% 50% 0 0;
+  }
+
+  .header-pattern {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-image:
+      radial-gradient(circle at 10% 30%, rgba(255,255,255,0.05) 1px, transparent 1px),
+      radial-gradient(circle at 90% 70%, rgba(255,255,255,0.05) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+
+  .header-content {
+    max-width: 900px;
+    margin: 0 auto;
+    position: relative;
+    z-index: 2;
+    text-align: center;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255,255,255,0.15);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: #fff;
+    padding: 8px 20px;
+    border-radius: 50px;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    animation: fadeSlideDown 0.6s ease;
+  }
+
+  .badge .dot {
+    width: 8px; height: 8px;
+    background: var(--cesupe-teal);
+    border-radius: 50%;
+    animation: pulse-dot 2s infinite;
+  }
+
+  .header h1 {
+    font-family: 'Baloo 2', cursive;
+    font-size: 32px;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1.2;
+    margin-bottom: 8px;
+    animation: fadeSlideDown 0.6s 0.1s ease both;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
+
+  .header .subtitle {
+    color: rgba(255,255,255,0.8);
+    font-size: 15px;
+    font-weight: 600;
+    animation: fadeSlideDown 0.6s 0.2s ease both;
+  }
+
+  /* === ROBOT HOST === */
+  .robot-host-container {
+    position: relative;
+    z-index: 10;
+    margin-top: -50px;
+    margin-bottom: 24px;
+    display: flex;
+    justify-content: center;
+  }
+
+  .robot-wrapper {
+    position: relative;
+  }
+
+  .robot-speech {
+    position: absolute;
+    top: -10px;
+    right: -180px;
+    background: var(--bg-card);
+    border-radius: 16px 16px 16px 4px;
+    padding: 12px 16px;
+    box-shadow: var(--shadow-medium);
+    max-width: 200px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-dark);
+    line-height: 1.4;
+    animation: floatBubble 0.8s 0.8s ease both;
+    border: 2px solid var(--cesupe-teal);
+  }
+
+  .robot-speech::before {
+    content: '';
+    position: absolute;
+    bottom: 20px;
+    left: -10px;
+    width: 0; height: 0;
+    border-top: 10px solid transparent;
+    border-bottom: 10px solid transparent;
+    border-right: 12px solid var(--cesupe-teal);
+  }
+
+  .robot-svg {
+    width: 120px;
+    height: 140px;
+    filter: drop-shadow(0 8px 20px rgba(26, 82, 118, 0.3));
+    animation: robotBounce 3s ease-in-out infinite;
+  }
+
+  /* === STEPS CONTAINER === */
+  .steps-container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 0 20px 40px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .progress-bar-container {
+    max-width: 600px;
+    margin: 0 auto 32px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 10px;
+  }
+
+  .progress-step {
+    flex: 1;
+    height: 6px;
+    background: rgba(26, 82, 118, 0.12);
+    border-radius: 3px;
+    transition: background 0.5s ease;
+    cursor: pointer;
+  }
+
+  .progress-step.active {
+    background: var(--cesupe-teal);
+  }
+
+  .progress-step.visited {
+    background: var(--primary-light);
+  }
+
+  /* === CARD === */
+  .step-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-medium);
+    overflow: hidden;
+    max-width: 660px;
+    margin: 0 auto 24px;
+    transform: translateY(30px);
+    opacity: 0;
+    animation: cardReveal 0.6s ease forwards;
+    cursor: pointer;
+    transition: box-shadow 0.3s ease, transform 0.3s ease;
+    border: 1px solid rgba(26, 82, 118, 0.06);
+  }
+
+  .step-card:hover {
+    box-shadow: var(--shadow-strong);
+    transform: translateY(-2px) !important;
+  }
+
+  .step-card:nth-child(1) { animation-delay: 0.1s; }
+  .step-card:nth-child(2) { animation-delay: 0.2s; }
+  .step-card:nth-child(3) { animation-delay: 0.3s; }
+  .step-card:nth-child(4) { animation-delay: 0.4s; }
+  .step-card:nth-child(5) { animation-delay: 0.5s; }
+  .step-card:nth-child(6) { animation-delay: 0.6s; }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 20px 24px;
+    position: relative;
+  }
+
+  .step-number {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Baloo 2', cursive;
+    font-size: 20px;
+    font-weight: 800;
+    color: #fff;
+    flex-shrink: 0;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .step-number::after {
+    content: '';
+    position: absolute;
+    top: -50%; left: -50%;
+    width: 200%; height: 200%;
+    background: linear-gradient(135deg, rgba(255,255,255,0.2) 0%, transparent 50%);
+    pointer-events: none;
+  }
+
+  .card-title-area {
+    flex: 1;
+  }
+
+  .card-title-area h3 {
+    font-family: 'Baloo 2', cursive;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-dark);
+    line-height: 1.3;
+  }
+
+  .card-title-area .tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 3px 10px;
+    border-radius: 6px;
+    margin-top: 4px;
+  }
+
+  .expand-icon {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: var(--bg-light);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.3s ease, background 0.3s ease;
+    flex-shrink: 0;
+  }
+
+  .step-card.open .expand-icon {
+    transform: rotate(180deg);
+    background: var(--cesupe-teal);
+  }
+
+  .step-card.open .expand-icon svg path {
+    stroke: #fff;
+  }
+
+  .card-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s ease;
+  }
+
+  .step-card.open .card-body {
+    max-height: 500px;
+    padding: 0 24px 24px;
+  }
+
+  .card-body-inner {
+    padding-top: 16px;
+    border-top: 1px solid rgba(26, 82, 118, 0.08);
+  }
+
+  .card-body p {
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--text-medium);
+    font-weight: 500;
+  }
+
+  .card-body .highlight {
+    background: linear-gradient(120deg, rgba(26, 188, 156, 0.12), rgba(41, 128, 185, 0.12));
+    padding: 12px 16px;
+    border-radius: 12px;
+    border-left: 4px solid var(--cesupe-teal);
+    margin-top: 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--primary);
+  }
+
+  .icon-container {
+    width: 52px; height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    flex-shrink: 0;
+  }
+
+  /* === COLOR THEMES PER CARD === */
+  .card-theme-1 .step-number { background: linear-gradient(135deg, #2980b9, #3498db); }
+  .card-theme-1 .tag { background: rgba(41, 128, 185, 0.1); color: #2980b9; }
+
+  .card-theme-2 .step-number { background: linear-gradient(135deg, #e67e22, #f39c12); }
+  .card-theme-2 .tag { background: rgba(230, 126, 34, 0.1); color: #e67e22; }
+
+  .card-theme-3 .step-number { background: linear-gradient(135deg, #1abc9c, #16a085); }
+  .card-theme-3 .tag { background: rgba(26, 188, 156, 0.1); color: #16a085; }
+
+  .card-theme-4 .step-number { background: linear-gradient(135deg, #8e44ad, #9b59b6); }
+  .card-theme-4 .tag { background: rgba(142, 68, 173, 0.1); color: #8e44ad; }
+
+  .card-theme-5 .step-number { background: linear-gradient(135deg, #c0392b, #e74c3c); }
+  .card-theme-5 .tag { background: rgba(192, 57, 43, 0.1); color: #c0392b; }
+
+  .card-theme-6 .step-number { background: linear-gradient(135deg, #2c3e50, #34495e); }
+  .card-theme-6 .tag { background: rgba(44, 62, 80, 0.1); color: #2c3e50; }
+
+  /* === FOOTER === */
+  .footer {
+    background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+    padding: 24px;
+    text-align: center;
+    color: rgba(255,255,255,0.7);
+    font-size: 13px;
+    font-weight: 600;
+    position: relative;
+  }
+
+  .footer::before {
+    content: '';
+    position: absolute;
+    top: -2px; left: 0; right: 0;
+    height: 40px;
+    background: var(--bg-light);
+    border-radius: 0 0 50% 50%;
+  }
+
+  .footer-inner {
+    position: relative;
+    z-index: 2;
+    padding-top: 20px;
+  }
+
+  .footer-logos {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+
+  .footer-logo {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'Baloo 2', cursive;
+    font-size: 16px;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  .footer-phone {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255,255,255,0.1);
+    padding: 8px 16px;
+    border-radius: 50px;
+    margin-top: 8px;
+    color: rgba(255,255,255,0.9);
+    font-size: 14px;
+  }
+
+  /* === EXPAND ALL BUTTON === */
+  .expand-all-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 0 auto 24px;
+    background: var(--bg-card);
+    border: 2px solid var(--primary-light);
+    color: var(--primary);
+    padding: 10px 24px;
+    border-radius: 50px;
+    font-family: 'Nunito', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: var(--shadow-soft);
+  }
+
+  .expand-all-btn:hover {
+    background: var(--primary);
+    color: #fff;
+    transform: translateY(-1px);
+  }
+
+  /* === ANIMATIONS === */
+  @keyframes fadeSlideDown {
+    from { opacity: 0; transform: translateY(-15px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes cardReveal {
+    from { opacity: 0; transform: translateY(30px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes floatBubble {
+    from { opacity: 0; transform: scale(0.8) translateY(10px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  @keyframes robotBounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.7); }
+  }
+
+  @keyframes wave {
+    0%, 100% { transform: rotate(0deg); }
+    25% { transform: rotate(12deg); }
+    75% { transform: rotate(-8deg); }
+  }
+
+  /* === RESPONSIVE - MOBILE iPhone === */
+  @media (max-width: 680px) {
+    .header {
+      padding: 20px 16px 70px;
+    }
+
+    .header h1 {
+      font-size: 22px;
+    }
+
+    .header .subtitle {
+      font-size: 13px;
+    }
+
+    .robot-host-container {
+      margin-top: -40px;
+      margin-bottom: 16px;
+    }
+
+    .robot-svg {
+      width: 90px;
+      height: 105px;
+    }
+
+    .robot-speech {
+      position: relative;
+      top: auto;
+      right: auto;
+      margin-top: 8px;
+      max-width: 100%;
+      text-align: center;
+      border-radius: 16px;
+      animation-delay: 0.5s;
+    }
+
+    .robot-speech::before {
+      display: none;
+    }
+
+    .robot-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .steps-container {
+      padding: 0 12px 32px;
+    }
+
+    .step-card {
+      border-radius: var(--radius);
+    }
+
+    .card-header {
+      padding: 16px;
+      gap: 12px;
+    }
+
+    .step-number {
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      font-size: 17px;
+    }
+
+    .card-title-area h3 {
+      font-size: 15px;
+    }
+
+    .card-title-area .tag {
+      font-size: 10px;
+    }
+
+    .step-card.open .card-body {
+      padding: 0 16px 16px;
+    }
+
+    .card-body p {
+      font-size: 14px;
+    }
+
+    .icon-container {
+      width: 40px;
+      height: 40px;
+      font-size: 22px;
+    }
+
+    .progress-bar-container {
+      margin-bottom: 20px;
+    }
+
+    .footer-logos {
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .expand-all-btn {
+      font-size: 13px;
+      padding: 8px 20px;
+    }
+  }
+
+  /* iPhone SE / smaller devices */
+  @media (max-width: 375px) {
+    .header h1 {
+      font-size: 19px;
+    }
+
+    .card-title-area h3 {
+      font-size: 14px;
+    }
+
+    .robot-svg {
+      width: 80px;
+      height: 95px;
+    }
+  }
+
+  /* Safe area for iPhone notch */
+  @supports (padding: max(0px)) {
+    .header {
+      padding-top: max(28px, env(safe-area-inset-top));
+    }
+    .footer {
+      padding-bottom: max(24px, env(safe-area-inset-bottom));
+    }
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-pattern"></div>
+  <div class="header-content">
+    <div class="badge">
+      <span class="dot"></span>
+      Dica da Semana
+    </div>
+    <h1>Inclusão de Processos em Pauta por Aditamento</h1>
+    <p class="subtitle">EPROC • 2ª Instância • TJMG</p>
+  </div>
+</div>
+
+<!-- ROBOT HOST -->
+<div class="robot-host-container">
+  <div class="robot-wrapper">
+    <svg class="robot-svg" viewBox="0 0 200 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- Antenna -->
+      <line x1="100" y1="10" x2="100" y2="35" stroke="#1b4f72" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="100" cy="8" r="7" fill="#1abc9c">
+        <animate attributeName="fill" values="#1abc9c;#f39c12;#1abc9c" dur="3s" repeatCount="indefinite"/>
+      </circle>
+
+      <!-- Head -->
+      <rect x="50" y="35" width="100" height="80" rx="20" fill="#d5e8f0" stroke="#1b4f72" stroke-width="3"/>
+      <!-- Eyes -->
+      <circle cx="75" cy="70" r="14" fill="#fff" stroke="#1b4f72" stroke-width="2"/>
+      <circle cx="125" cy="70" r="14" fill="#fff" stroke="#1b4f72" stroke-width="2"/>
+      <circle cx="78" cy="68" r="7" fill="#1b4f72">
+        <animate attributeName="cx" values="78;73;78;83;78" dur="4s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="128" cy="68" r="7" fill="#1b4f72">
+        <animate attributeName="cx" values="128;123;128;133;128" dur="4s" repeatCount="indefinite"/>
+      </circle>
+      <!-- Sparkle eyes -->
+      <circle cx="80" cy="65" r="2.5" fill="#fff"/>
+      <circle cx="130" cy="65" r="2.5" fill="#fff"/>
+      <!-- Mouth smile -->
+      <path d="M 82 92 Q 100 106 118 92" stroke="#1b4f72" stroke-width="3" stroke-linecap="round" fill="none"/>
+      <!-- Ears -->
+      <rect x="38" y="58" width="14" height="24" rx="5" fill="#1abc9c" stroke="#1b4f72" stroke-width="2"/>
+      <rect x="148" y="58" width="14" height="24" rx="5" fill="#1abc9c" stroke="#1b4f72" stroke-width="2"/>
+
+      <!-- CESUPE Shirt / Body -->
+      <path d="M60 120 L60 195 Q60 210 75 210 L125 210 Q140 210 140 195 L140 120 Q140 115 100 118 Q60 115 60 120Z" fill="#1b4f72" stroke="#0e3a56" stroke-width="2"/>
+      <!-- Shirt collar -->
+      <path d="M75 118 L100 130 L125 118" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/>
+      <!-- CESUPE text on shirt -->
+      <text x="100" y="158" text-anchor="middle" font-family="'Baloo 2', sans-serif" font-size="14" font-weight="800" fill="#fff" letter-spacing="1">CESUPE</text>
+      <!-- Shirt detail line -->
+      <line x1="100" y1="130" x2="100" y2="200" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+      <!-- Badge on shirt -->
+      <circle cx="83" cy="142" r="6" fill="#1abc9c" stroke="#fff" stroke-width="1.5"/>
+      <text x="83" y="145" text-anchor="middle" font-size="7" fill="#fff" font-weight="bold">✓</text>
+
+      <!-- Arms -->
+      <g style="transform-origin: 58px 135px; animation: wave 3s ease-in-out infinite;">
+        <path d="M58 130 Q30 145 28 170 Q26 180 35 178" stroke="#1b4f72" stroke-width="8" stroke-linecap="round" fill="none"/>
+        <circle cx="35" cy="178" r="8" fill="#d5e8f0" stroke="#1b4f72" stroke-width="2"/>
+      </g>
+      <path d="M142 130 Q170 145 168 170 Q170 182 162 180" stroke="#1b4f72" stroke-width="8" stroke-linecap="round" fill="none"/>
+      <circle cx="162" cy="180" r="8" fill="#d5e8f0" stroke="#1b4f72" stroke-width="2"/>
+
+      <!-- Legs / Feet -->
+      <rect x="72" y="208" width="22" height="14" rx="7" fill="#0e3a56"/>
+      <rect x="106" y="208" width="22" height="14" rx="7" fill="#0e3a56"/>
+      <!-- Shoe detail -->
+      <rect x="68" y="218" width="30" height="10" rx="5" fill="#5d6d7e"/>
+      <rect x="102" y="218" width="30" height="10" rx="5" fill="#5d6d7e"/>
+    </svg>
+
+    <div class="robot-speech">
+      👋 Olá! Sou o Robô do CESUPE! Toque nos cards abaixo para aprender sobre o <strong>Aditamento</strong>!
+    </div>
+  </div>
+</div>
+
+<!-- PROGRESS BAR -->
+<div class="steps-container">
+  <div class="progress-bar-container" id="progressBar">
+    <div class="progress-step" data-step="0"></div>
+    <div class="progress-step" data-step="1"></div>
+    <div class="progress-step" data-step="2"></div>
+    <div class="progress-step" data-step="3"></div>
+    <div class="progress-step" data-step="4"></div>
+    <div class="progress-step" data-step="5"></div>
+  </div>
+
+  <button class="expand-all-btn" id="expandAllBtn" onclick="toggleAll()">
+    <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+    <span id="expandAllText">Expandir todos</span>
+  </button>
+
+  <!-- CARD 1 -->
+  <div class="step-card card-theme-1" data-step="0" onclick="toggleCard(this)">
+    <div class="card-header">
+      <div class="step-number">1</div>
+      <div class="icon-container">📜</div>
+      <div class="card-title-area">
+        <h3>O que é o Aditamento?</h3>
+        <span class="tag">Conceito</span>
+      </div>
+      <div class="expand-icon">
+        <svg width="18" height="18" fill="none" stroke="#5d6d7e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="card-body-inner">
+        <p>O Aditamento é a possibilidade de <strong>inclusão de processos em pauta</strong> mesmo após a publicação e intimação das partes.</p>
+        <div class="highlight">💡 Permite adicionar novos processos a uma sessão de julgamento com publicação gerada.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CARD 2 -->
+  <div class="step-card card-theme-2" data-step="1" onclick="toggleCard(this)">
+    <div class="card-header">
+      <div class="step-number">2</div>
+      <div class="icon-container">📅</div>
+      <div class="card-title-area">
+        <h3>Prazo Limite de 7 Dias Úteis</h3>
+        <span class="tag">Prazo</span>
+      </div>
+      <div class="expand-icon">
+        <svg width="18" height="18" fill="none" stroke="#5d6d7e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="card-body-inner">
+        <p>A inclusão em pauta deve respeitar a <strong>antecedência mínima exigida pelo sistema</strong>, que é de 7 dias úteis.</p>
+        <div class="highlight">⚠️ Atenção: Na pauta presencial, o sistema não permite a inclusão fora do prazo de antecedência mínima.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CARD 3 -->
+  <div class="step-card card-theme-3" data-step="2" onclick="toggleCard(this)">
+    <div class="card-header">
+      <div class="step-number">3</div>
+      <div class="icon-container">📋</div>
+      <div class="card-title-area">
+        <h3>Tipo de Inclusão "Aditamento"</h3>
+        <span class="tag">Procedimento</span>
+      </div>
+      <div class="expand-icon">
+        <svg width="18" height="18" fill="none" stroke="#5d6d7e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="card-body-inner">
+        <p>Após o fechamento da pauta, deverá ser selecionado <strong>especificamente o tipo de inclusão "Aditamento"</strong> no sistema.</p>
+        <div class="highlight">🔧 A inclusão pode ser feita de duas formas: pela Pauta ou pelo Processo. Em ambos os casos, selecione "Aditamento" como tipo de inclusão.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CARD 4 -->
+  <div class="step-card card-theme-4" data-step="3" onclick="toggleCard(this)">
+    <div class="card-header">
+      <div class="step-number">4</div>
+      <div class="icon-container">📢</div>
+      <div class="card-title-area">
+        <h3>Intimação e Publicação Obrigatórias</h3>
+        <span class="tag">Obrigatório</span>
+      </div>
+      <div class="expand-icon">
+        <svg width="18" height="18" fill="none" stroke="#5d6d7e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="card-body-inner">
+        <p>É <strong>indispensável</strong> intimar procuradores e publicar a pauta dos processos incluídos por aditamento.</p>
+        <div class="highlight">⚖️ A intimação garante o direito ao contraditório e à ampla defesa das partes envolvidas.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CARD 5 -->
+  <div class="step-card card-theme-5" data-step="4" onclick="toggleCard(this)">
+    <div class="card-header">
+      <div class="step-number">5</div>
+      <div class="icon-container">🔒</div>
+      <div class="card-title-area">
+        <h3>Bloqueio de Fechamento de Pauta</h3>
+        <span class="tag">Bloqueio</span>
+      </div>
+      <div class="expand-icon">
+        <svg width="18" height="18" fill="none" stroke="#5d6d7e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="card-body-inner">
+        <p>O EPROC <strong>impede o fechamento da pauta</strong> caso a publicidade do aditamento não seja confirmada.</p>
+        <div class="highlight">🛡️ Trava de segurança: O sistema bloqueia automaticamente até que todas as publicações sejam realizadas.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CARD 6 -->
+  <div class="step-card card-theme-6" data-step="5" onclick="toggleCard(this)">
+    <div class="card-header">
+      <div class="step-number">6</div>
+      <div class="icon-container">🏛️</div>
+      <div class="card-title-area">
+        <h3>Impedimento da Sessão</h3>
+        <span class="tag">Atenção</span>
+      </div>
+      <div class="expand-icon">
+        <svg width="18" height="18" fill="none" stroke="#5d6d7e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="card-body-inner">
+        <p>A <strong>ausência de intimação e de publicação</strong> inviabiliza a abertura e conclusão da sessão de julgamento.</p>
+        <div class="highlight">🚫 Consequência: Sem a correta publicação e intimação, a sessão inteira pode ser comprometida.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  <div class="footer-inner">
+    <div class="footer-logos">
+      <div class="footer-logo">🏛️ TJMG</div>
+      <div class="footer-logo">💻 CESUPE</div>
+      <div class="footer-logo">⚙️ EPROC</div>
+    </div>
+    <p>Centro de Suporte Técnico ao Processo Judicial Eletrônico – CESUPE<br>Coordenação de Apoio e Acompanhamento dos Sistemas Judiciais – COSIJP</p>
+    <div class="footer-phone">📞 3232-2640</div>
+  </div>
+</div>
+
+<script>
+  const cards = document.querySelectorAll('.step-card');
+  const progressSteps = document.querySelectorAll('.progress-step');
+  let allExpanded = false;
+
+  function toggleCard(card) {
+    const wasOpen = card.classList.contains('open');
+    card.classList.toggle('open');
+
+    const stepIndex = parseInt(card.dataset.step);
+
+    if (!wasOpen) {
+      progressSteps[stepIndex].classList.add('visited');
+      progressSteps[stepIndex].classList.add('active');
+
+      // Smooth scroll on mobile
+      if (window.innerWidth <= 680) {
+        setTimeout(() => {
+          card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 100);
+      }
+    } else {
+      progressSteps[stepIndex].classList.remove('active');
+    }
+
+    updateExpandButton();
+    updateRobotMessage();
+  }
+
+  function toggleAll() {
+    allExpanded = !allExpanded;
+    cards.forEach((card, i) => {
+      if (allExpanded) {
+        card.classList.add('open');
+        progressSteps[i].classList.add('visited', 'active');
+      } else {
+        card.classList.remove('open');
+        progressSteps[i].classList.remove('active');
+      }
+    });
+    updateExpandButton();
+    updateRobotMessage();
+  }
+
+  function updateExpandButton() {
+    const openCount = document.querySelectorAll('.step-card.open').length;
+    const btn = document.getElementById('expandAllText');
+    if (openCount === cards.length) {
+      btn.textContent = 'Recolher todos';
+      allExpanded = true;
+    } else {
+      btn.textContent = 'Expandir todos';
+      allExpanded = false;
+    }
+  }
+
+  function updateRobotMessage() {
+    const speech = document.querySelector('.robot-speech');
+    const openCount = document.querySelectorAll('.step-card.open').length;
+    const messages = [
+      '👋 Olá! Sou o Robô do CESUPE! Toque nos cards abaixo para aprender sobre o <strong>Aditamento</strong>!',
+      '👍 Isso! Continue explorando para entender todo o processo de aditamento.',
+      '📚 Ótimo progresso! Você já conhece metade dos conceitos.',
+      '🔥 Quase lá! Você está dominando o aditamento no EPROC!',
+      '⭐ Muito bem! Só faltam mais dois para completar!',
+      '🎯 Só mais um! Vamos completar todo o conteúdo!',
+      '🎉 Parabéns! Você completou todas as dicas sobre <strong>Aditamento</strong>! Em caso de dúvidas, ligue para <strong>3232-2640</strong>.'
+    ];
+    speech.innerHTML = messages[Math.min(openCount, messages.length - 1)];
+  }
+
+  // Progress bar click navigation
+  progressSteps.forEach(step => {
+    step.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const index = parseInt(step.dataset.step);
+      const targetCard = cards[index];
+      targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (!targetCard.classList.contains('open')) {
+        toggleCard(targetCard);
+      }
+    });
+  });
+</script>
+</body>
+</html>
