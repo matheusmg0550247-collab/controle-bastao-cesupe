@@ -33,6 +33,23 @@ function BotaoDicasDiarias() {
   )
 }
 
+function BotaoCarometro() {
+  const handleClick = () => {
+    window.open('/Carômetro_Cesupe.html', '_blank', 'noopener,noreferrer')
+  }
+
+  return (
+    <button
+      onClick={handleClick}
+      className="group flex items-center justify-center gap-3 w-full px-6 py-4 bg-gradient-to-r from-cyan-500 via-teal-500 to-emerald-500 hover:from-cyan-600 hover:via-teal-600 hover:to-emerald-600 text-white font-bold text-base rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5 cursor-pointer border-0"
+    >
+      <span className="text-2xl group-hover:scale-110 transition-transform duration-300">👥</span>
+      <span className="tracking-wide">Carômetro CESUPE</span>
+      <span className="text-white/70 group-hover:translate-x-1 transition-transform duration-300">→</span>
+    </button>
+  )
+}
+
 function App() {
   const { initRealtime, meuLogin } = useBastaoStore()
 
@@ -72,6 +89,7 @@ function App() {
               <div className="xl:col-span-1 flex flex-col gap-6">
                 <PainelEquipe />
                 <BotaoDicasDiarias />
+                <BotaoCarometro />
                 <TriagemBastao />
                 <PainelMural />
               </div>
@@ -90,6 +108,7 @@ function App() {
                 <PainelLogmein />
                 <PainelFerramentas />
                 <BotaoDicasDiarias />
+                <BotaoCarometro />
                 <TriagemBastao />
               </div>
               <div className="flex flex-col gap-6">
