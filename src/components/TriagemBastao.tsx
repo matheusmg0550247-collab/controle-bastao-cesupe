@@ -49,14 +49,14 @@ export function TriagemBastao() {
         className="group flex items-center justify-center gap-3 w-full px-6 py-4 bg-gradient-to-r from-green-500 via-green-500 to-emerald-500 hover:from-green-600 hover:via-green-600 hover:to-emerald-600 text-white font-bold text-base rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5 cursor-pointer border-0"
       >
         <span className="text-2xl group-hover:scale-110 transition-transform duration-300">📋</span>
-        <span className="tracking-wide">Triagem Bastão</span>
+        <span className="tracking-wide">Triagem Chamados</span>
         <span className="text-white/70 group-hover:translate-x-1 transition-transform duration-300">→</span>
       </button>
 
       {modalAberto && (
         <div className="fixed inset-0 z-50 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl p-6 border border-green-200">
-            <h3 className="text-xl font-extrabold text-green-700 mb-1 flex items-center gap-2">📋 Triagem Bastão</h3>
+            <h3 className="text-xl font-extrabold text-green-700 mb-1 flex items-center gap-2">📋 Triagem Chamados</h3>
             <p className="text-sm text-gray-500 mb-5">Envie o PDF da triagem para processamento automático no n8n.</p>
 
             <div

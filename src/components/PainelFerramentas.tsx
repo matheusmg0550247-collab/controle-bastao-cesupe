@@ -32,7 +32,7 @@ export function PainelFerramentas() {
   const [atdDesfecho, setAtdDesfecho] = useState('Resolvido - Cesupe')
   const [atdJira, setAtdJira] = useState('')
 
-  const usuarioOptions = ["Cartório", "Magistrado", "Público Externo", "Interno", "Outros"]
+  const usuarioOptions = ["Cartório", "Gabinete", "Público Externo", "Interno", "Outros"]
   const sistemaOptions = ["Eproc", "JPE", "PJe", "SEI", "Conveniados", "Outros"]
   const canalOptions = ["Whatsapp", "Telefone", "Presencial", "E-mail", "Jira", "Outros"]
   const desfechoOptions = ["Resolvido - Cesupe", "Encaminhado N2", "Encaminhado N3", "Aguardando Usuário", "Outros"]
