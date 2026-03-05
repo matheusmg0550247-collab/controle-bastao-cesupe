@@ -51,6 +51,10 @@ export function PainelFerramentas() {
   const [certParte, setCertParte] = useState('')
   const [certPeticao, setCertPeticao] = useState('Inicial')
 
+  // ESTADOS DO LANCHE
+  const [lancheItem, setLancheItem] = useState('')
+  const [lancheEstabelecimento, setLancheEstabelecimento] = useState('')
+
   const btnClass = "bg-gradient-to-b from-white to-gray-50 border border-gray-200 text-gray-800 font-bold py-3 px-2 rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 active:shadow-inner active:scale-95 active:translate-y-0.5 transition-all duration-150"
   const labelClass = "block text-xs font-bold text-gray-500 mb-1 mt-3"
   const inputClass = "w-full border border-gray-300 rounded-lg p-2.5 outline-none focus:ring-2 bg-gray-50 text-gray-800 transition-shadow"
@@ -202,6 +206,9 @@ export function PainelFerramentas() {
         <button onClick={() => setModalAberto('erro_novidade')} className={btnClass}>🐛 Erro/Novidade</button>
         <button onClick={() => setModalAberto('certidao')} className={btnClass}>🖨️ Certidão</button>
         <button onClick={() => setModalAberto('sugestao')} className={btnClass}>💡 Sugestão</button>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+        <button onClick={() => setModalAberto('lanche')} className={btnClass}>🍔 Lanche</button>
       </div>
 
       {/* --- MODAIS DE FERRAMENTAS --- */}
@@ -376,6 +383,62 @@ export function PainelFerramentas() {
             <button onClick={() => setModalAberto(null)} className="mt-4 px-6 py-2 bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-lg font-bold text-sm transition-colors border border-gray-300">
               ❌ Cancelar
             </button>
+          </div>
+        </div>
+      )}
+
+      {modalAberto === 'lanche' && (
+        <div className="fixed inset-0 z-50 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl p-6 border border-gray-200">
+            <h3 className="text-xl font-extrabold text-amber-600 mb-4 flex items-center gap-2">🍔 Pedido de Lanche</h3>
+            <label className={labelClass}>Lanche:</label>
+            <input
+              type="text"
+              value={lancheItem}
+              onChange={(e) => setLancheItem(e.target.value)}
+              className={`${inputClass} focus:ring-amber-500`}
+              placeholder="Ex: X-Burguer, Coxinha..."
+            />
+            <label className={labelClass}>Estabelecimento:</label>
+            <input
+              type="text"
+              value={lancheEstabelecimento}
+              onChange={(e) => setLancheEstabelecimento(e.target.value)}
+              className={`${inputClass} focus:ring-amber-500`}
+              placeholder="Ex: Lanchonete do João..."
+            />
+            <div className="flex gap-2 mt-6">
+              <button
+                disabled={loading || !lancheItem || !lancheEstabelecimento}
+                onClick={async () => {
+                  setLoading(true)
+                  try {
+                    const mensagem_whatsapp = `🍔 *Pedido de Lanche*\n👤 *Consultor:* ${meuLogin}\n🍽️ *Lanche:* ${lancheItem}\n🏪 *Estabelecimento:* ${lancheEstabelecimento}`
+                    const res = await fetch("https://matheusgomes12.app.n8n.cloud/webhook/f60ac38f-0e70-4d58-8404-352ba3a22fd0", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ mensagem_whatsapp, consultor: meuLogin, lanche: lancheItem, estabelecimento: lancheEstabelecimento, timestamp: new Date().toISOString() })
+                    })
+                    if (res.ok) {
+                      alert("✅ Pedido de lanche enviado!")
+                      setModalAberto(null)
+                      setLancheItem('')
+                      setLancheEstabelecimento('')
+                    } else {
+                      alert("❌ Falha ao enviar para o n8n.")
+                    }
+                  } catch {
+                    alert("❌ Erro inesperado ao enviar.")
+                  } finally {
+                    setLoading(false)
+                  }
+                }}
+                className="flex-1 bg-amber-500 text-white font-bold py-3 rounded-xl shadow-md disabled:opacity-50"
+              >
+                {loading ? 'Enviando...' : 'Enviar Pedido'}
+              </button>
+              <button onClick={() => setModalAberto(null)} className="flex-1 bg-gray-200 text-gray-800 font-bold py-3 rounded-xl">Cancelar</button>
+            </div>
           </div>
         </div>
       )}

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useBastaoStore } from '../store/useBastaoStore'
-import { getRamal, USUARIOS_SISTEMA, getConsultorDisplayName } from '../constants'
+import { getRamal, USUARIOS_SISTEMA, getConsultorDisplayName, CONSULTOR_IMAGENS } from '../constants'
 
 export function PainelBastao() {
   const { filaEproc, filaJpe, skipFlags, quickIndicators, statusTexto, updateStatus, meuLogin } = useBastaoStore()
@@ -41,7 +41,8 @@ export function PainelBastao() {
             <div onClick={() => handleRemoverDaFila(fila[0])} className={`border-2 border-${corTema}-400 bg-${corTema}-50 p-4 rounded-xl flex justify-between items-center shadow-md cursor-pointer hover:bg-${corTema}-100 transition-colors group`} title="Clique para remover da fila">
               <div className="flex items-center gap-3">
                 <span className="text-3xl">🔥</span>
-                <span className={`text-2xl font-black text-${corTema}-600 group-hover:text-${corTema}-800`}>
+                <span className={`text-2xl font-black text-${corTema}-600 group-hover:text-${corTema}-800 flex items-center gap-1`}>
+                  {CONSULTOR_IMAGENS[fila[0]] && <img src={CONSULTOR_IMAGENS[fila[0]]} alt="" className="w-7 h-7 object-contain inline-block" />}
                   {getConsultorDisplayName(fila[0])}
                 </span>
                 {/* Emoji de status (Atividades/Projeto) */}
@@ -75,7 +76,10 @@ export function PainelBastao() {
                 <div key={nome} onClick={() => handleRemoverDaFila(nome)} className="bg-gray-50 border border-gray-200 p-3 rounded-xl flex justify-between items-center cursor-pointer hover:bg-red-50 hover:border-red-200 transition-colors group" title="Clique para remover da fila">
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-black text-gray-400 bg-white px-2 py-1 rounded-md shadow-sm border border-gray-100">{index + 2}º</span>
-                    <span className="font-bold text-gray-700 group-hover:text-red-700">{getConsultorDisplayName(nome)}</span>
+                    <span className="font-bold text-gray-700 group-hover:text-red-700 flex items-center gap-1">
+                      {CONSULTOR_IMAGENS[nome] && <img src={CONSULTOR_IMAGENS[nome]} alt="" className="w-5 h-5 object-contain inline-block" />}
+                      {getConsultorDisplayName(nome)}
+                    </span>
                     {/* Emoji de status (Atividades/Projeto) */}
                     {getStatusEmoji(nome) && (
                       <span className="text-sm" title={statusTexto[nome]}>{getStatusEmoji(nome)}</span>
@@ -116,7 +120,12 @@ export function PainelBastao() {
         <div className="fixed inset-0 z-[999] flex items-center justify-center pointer-events-none">
           <div className="bg-white rounded-3xl shadow-2xl border-2 border-orange-200 p-8 text-center pointer-events-none" style={{ animation: 'fadeIn 0.15s ease-out' }}>
             <p className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-1">Ramal de</p>
-            <p className="text-2xl font-black text-gray-800 mb-4">{ramalPopover}</p>
+            <p className="text-2xl font-black text-gray-800 mb-4 flex items-center justify-center gap-2">
+              {CONSULTOR_IMAGENS[ramalPopover] && (
+                <img src={CONSULTOR_IMAGENS[ramalPopover]} alt="" className="w-10 h-10 object-contain" />
+              )}
+              {ramalPopover}
+            </p>
             <div className="bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-2xl px-10 py-5 shadow-lg">
               <p className="text-5xl font-black tracking-wider">☎ {getRamal(ramalPopover)}</p>
             </div>

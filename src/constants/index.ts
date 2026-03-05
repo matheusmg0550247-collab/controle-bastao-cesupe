@@ -9,7 +9,7 @@ export const EQUIPE_JPE = [
   "Alex Paulo", "Dirceu Gonçalves", "Douglas De Souza", "Farley", "Gleis",
   "Hugo Leonardo", "Igor Dayrell", "Jerry Marcos", "Leandro",
   "Luiz Henrique", "Marcelo dos Santos Dutra", "Marina Marques",
-  "Marina Torres", "Vanessa Ligiane"
+  "Marina Amaral", "Vanessa Ligiane"
 ].sort();
 
 export const TODOS_CONSULTORES = [...EQUIPE_EPROC, ...EQUIPE_JPE].sort();
@@ -28,7 +28,7 @@ export const RAMAIS: Record<string, string> = {
   "Marina Marques": "2607", "Matheus": "2664", "Michael": "2516", "Michael Douglas": "2516",
   "Morôni": "4206", "Pablo": "2658", "Ranyer": "2669", "Sarah": "2643",
   "Vanessa": "2510", "Victória": "2660", "Victoria": "2660",
-  "Brenda": "", "Marina Torres": ""
+  "Brenda": ""
 };
 
 // ========================
@@ -66,6 +66,11 @@ export function getRamal(nome: string): string {
 // Emojis especiais por consultor
 const CONSULTOR_EMOJIS: Record<string, string> = {
   "Pablo Mol": "🤓",
+};
+
+// Imagens especiais por consultor (exibidas antes do nome)
+export const CONSULTOR_IMAGENS: Record<string, string> = {
+  "Ivana Guimarães": "/Coração.png",
 };
 
 export function getConsultorDisplayName(nome: string): string {
