@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useBastaoStore } from '../store/useBastaoStore'
+import { supabase } from '../lib/supabase'
 import { Document, Packer, Paragraph, TextRun, AlignmentType } from 'docx'
 import { saveAs } from 'file-saver'
 
@@ -30,11 +31,11 @@ export function PainelFerramentas() {
   const [atdDescricao, setAtdDescricao] = useState('')
   const [atdCanal, setAtdCanal] = useState('Presencial')
   const [atdDesfecho, setAtdDesfecho] = useState('Resolvido - Cesupe')
-  const [atdJira, setAtdJira] = useState('')
+  // REMOVIDO: atdJira
 
   const usuarioOptions = ["Cartório", "Gabinete", "Público Externo", "Interno", "Outros"]
   const sistemaOptions = ["Eproc", "JPE", "PJe", "SEI", "Conveniados", "Outros"]
-  const canalOptions = ["Whatsapp", "Telefone", "Presencial", "E-mail", "Jira", "Outros"]
+  const canalOptions   = ["Whatsapp", "Telefone", "Presencial", "E-mail", "Outros"]
   const desfechoOptions = ["Resolvido - Cesupe", "Encaminhado N2", "Encaminhado N3", "Aguardando Usuário", "Outros"]
 
   const [heData, setHeData] = useState(hoje)
@@ -42,7 +43,6 @@ export function PainelFerramentas() {
   const [heTempoTotal, setHeTempoTotal] = useState('')
   const [heMotivo, setHeMotivo] = useState('')
 
-  // ESTADOS DA CERTIDÃO
   const [certDatas, setCertDatas] = useState<string[]>([hoje])
   const [certTipo, setCertTipo] = useState('Geral')
   const [certMotivo, setCertMotivo] = useState('')
@@ -51,9 +51,86 @@ export function PainelFerramentas() {
   const [certParte, setCertParte] = useState('')
   const [certPeticao, setCertPeticao] = useState('Inicial')
 
-  // ESTADOS DO LANCHE
   const [lancheItem, setLancheItem] = useState('')
   const [lancheEstabelecimento, setLancheEstabelecimento] = useState('')
+
+  // ── Bastões pendentes ──────────────────────────────────────────────────
+  // de_consultor = quem TINHA o bastão (pode ser diferente de meuLogin em auditorias)
+  interface RotacaoPendente {
+    id: number
+    equipe: string
+    de_consultor: string   // dono do bastão — consultor que precisa registrar
+    para_consultor: string
+    data_hora: string
+  }
+  const [bastoesPendentes, setBastoesPendentes] = useState<RotacaoPendente[]>([])
+  const [pendenteExpandido, setPendenteExpandido] = useState<number | null>(null)
+
+  // Form inline de cada pendência
+  const [pendAtdUsuario,   setPendAtdUsuario]   = useState('Público Externo')
+  const [pendAtdSetor,     setPendAtdSetor]     = useState('')
+  const [pendAtdSistema,   setPendAtdSistema]   = useState('JPE')
+  const [pendAtdDescricao, setPendAtdDescricao] = useState('')
+  const [pendAtdCanal,     setPendAtdCanal]     = useState('Whatsapp')
+  const [pendAtdDesfecho,  setPendAtdDesfecho]  = useState('Resolvido - Cesupe')
+
+  // Busca ao montar E em tempo real
+  useEffect(() => {
+    buscarPendentes()
+    const ch = supabase
+      .channel('ferramentas-pendentes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bastao_rotacoes' }, buscarPendentes)
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [meuLogin])
+
+  async function buscarPendentes() {
+    if (!meuLogin) return
+    // Busca pendências cujo de_consultor = meuLogin
+    // (mesmo que outra pessoa tenha clicado em Passar Bastão por ele)
+    const { data } = await supabase
+      .from('bastao_rotacoes')
+      .select('id, equipe, de_consultor, para_consultor, data_hora')
+      .eq('de_consultor', meuLogin)
+      .eq('registro_status', 'depois')
+      .order('data_hora', { ascending: true })
+    setBastoesPendentes(data || [])
+  }
+
+  async function handleRegistrarPendente(rot: RotacaoPendente) {
+    if (!pendAtdDescricao.trim()) return alert('Preencha a descrição!')
+    setLoading(true)
+    try {
+      const dataRot = rot.data_hora.split('T')[0]
+      // Salva o atendimento com o consultor = de_consultor (dono do bastão)
+      const { data: atd } = await supabase
+        .from('atendimentos_cesupe')
+        .insert({
+          data: dataRot,
+          consultor: rot.de_consultor,   // ← sempre o dono do bastão
+          usuario: pendAtdUsuario,
+          nome_setor: pendAtdSetor,
+          sistema: pendAtdSistema,
+          descricao: pendAtdDescricao,
+          canal: pendAtdCanal,
+          desfecho: pendAtdDesfecho,
+          resumo: '',
+        })
+        .select('id')
+        .single()
+      // Zera a pendência
+      await supabase
+        .from('bastao_rotacoes')
+        .update({ registro_status: 'registrado', atendimento_cesupe_id: atd?.id ?? null })
+        .eq('id', rot.id)
+      alert('✅ Atendimento registrado e pendência zerada!')
+      setPendenteExpandido(null)
+      setPendAtdDescricao(''); setPendAtdSetor('')
+      // lista atualiza via realtime, mas forçamos também
+      await buscarPendentes()
+    } catch { alert('❌ Erro ao registrar.') }
+    finally { setLoading(false) }
+  }
 
   const btnClass = "bg-gradient-to-b from-white to-gray-50 border border-gray-200 text-gray-800 font-bold py-3 px-2 rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 active:shadow-inner active:scale-95 active:translate-y-0.5 transition-all duration-150"
   const labelClass = "block text-xs font-bold text-gray-500 mb-1 mt-3"
@@ -78,7 +155,40 @@ export function PainelFerramentas() {
     }
   }
 
-  // MOTOR GERADOR DE WORD
+  // ── Registrar atendimento: salva no Supabase + envia n8n ──
+  const handleRegistrarAtendimento = async () => {
+    if (!atdDescricao.trim()) return alert('Preencha a descrição!')
+    setLoading(true)
+    try {
+      // 1. Salva na tabela atendimentos_cesupe
+      const { error } = await supabase.from('atendimentos_cesupe').insert({
+        data: atdData,
+        consultor: meuLogin,
+        usuario: atdUsuario,
+        nome_setor: atdSetor,
+        sistema: atdSistema,
+        descricao: atdDescricao,
+        canal: atdCanal,
+        desfecho: atdDesfecho,
+        resumo: '',
+      })
+      if (error) throw error
+
+      // 2. Envia pro n8n
+      const msg = `📝 **Novo Atendimento**\n👤 **Consultor:** ${meuLogin}\n📅 **Data:** ${formatarDataBR(atdData)}\n🧑‍💼 **Usuário:** ${atdUsuario}\n🏢 **Setor:** ${atdSetor}\n💻 **Sistema:** ${atdSistema}\n📋 **Descrição:** ${atdDescricao}\n📞 **Canal:** ${atdCanal}\n✅ **Desfecho:** ${atdDesfecho}`
+      await enviarRegistroN8n("ATENDIMENTOS", { data: formatarDataBR(atdData), usuario: atdUsuario, setor: atdSetor, sistema: atdSistema, descricao: atdDescricao, canal: atdCanal, desfecho: atdDesfecho }, msg)
+
+      alert('✅ Atendimento registrado!')
+      setModalAberto(null)
+      setAtdDescricao(''); setAtdSetor('')
+    } catch (err) {
+      console.error(err)
+      alert('❌ Erro ao salvar atendimento no banco.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const criarBlobDocx = async (dataParaDoc: string) => {
     const dataFormatada = formatarDataBR(dataParaDoc);
     let paragrafosCorpo: Paragraph[] = [];
@@ -110,7 +220,7 @@ export function PainelFerramentas() {
           new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: "TRIBUNAL DE JUSTIÇA", bold: true, size: 24 })] }),
           new Paragraph({ text: "", spacing: { after: 400 } }),
           new Paragraph({ children: [new TextRun({ text: "Parecer Técnico GEJUD/DIRTEC/TJMG", bold: true, size: 24 })], spacing: { after: 100 } }),
-          new Paragraph({ children: [new TextRun({ text: "Assunto: Notifica erro no “JPe – 2ª Instância” ao peticionar.", bold: true, size: 24 })], spacing: { after: 400 } }),
+          new Paragraph({ children: [new TextRun({ text: 'Assunto: Notifica erro no “JPe – 2ª Instância” ao peticionar.', bold: true, size: 24 })], spacing: { after: 400 } }),
           new Paragraph({ children: [new TextRun({ text: `Belo Horizonte, ${new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}`, size: 24 })], spacing: { after: 400 } }),
           new Paragraph({ children: [new TextRun({ text: "Exmo(a). Senhor(a) Relator(a),", size: 24 })], spacing: { after: 200 } }),
           ...paragrafosCorpo,
@@ -140,44 +250,20 @@ export function PainelFerramentas() {
   const handleSalvarENotificar = async () => {
     if (!certProcesso) return alert("Preencha ao menos o número do processo!")
     setLoading(true)
-
     try {
       let todosSalvos = true;
-
       for (const data of certDatas) {
-        const payloadSupabase = {
-          processo: certProcesso,
-          nome_parte: certParte,
-          consultor: meuLogin,
-          data, 
-          tipo: certTipo,
-          peticao: certPeticao,
-          incidente: certIncidente,
-          motivo: certMotivo
-        };
-        
+        const payloadSupabase = { processo: certProcesso, nome_parte: certParte, consultor: meuLogin, data, tipo: certTipo, peticao: certPeticao, incidente: certIncidente, motivo: certMotivo };
         const salvoNoBanco = await salvarCertidaoSupabase(payloadSupabase);
         if (!salvoNoBanco) { todosSalvos = false; continue; }
       }
-
       if (!todosSalvos) throw new Error("Falha ao salvar uma ou mais certidões no banco");
-
-      // Gera Word da primeira data (referência)
       const blob = await criarBlobDocx(certDatas[0]);
-      
-      // Converte o arquivo para Base64
-      const base64: string = await new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.readAsDataURL(blob);
-      });
-
+      const base64: string = await new Promise((resolve) => { const reader = new FileReader(); reader.onloadend = () => resolve(reader.result as string); reader.readAsDataURL(blob); });
       const datasFormatadas = certDatas.map(d => formatarDataBR(d)).join(', ');
       const payloadN8n = { processo: certProcesso, nome_parte: certParte, consultor: meuLogin, datas: certDatas, tipo: certTipo, peticao: certPeticao, incidente: certIncidente, motivo: certMotivo, arquivo_docx_base64: base64 };
       const msg = `🖨️ **Certidão Gerada**\n👤 **Autor:** ${meuLogin}\n📄 **Processo:** ${certProcesso}\n🏷️ **Tipo:** ${certTipo}\n📅 **Datas:** ${datasFormatadas} (${certDatas.length} dia(s))`;
-      
       const n8nSucesso = await enviarRegistroN8n("CERTIDAO", payloadN8n, msg);
-      
       if (n8nSucesso) {
         alert(`✅ ${certDatas.length} certidão(ões) salva(s) no Supabase e enviada(s) para o n8n!`);
         setModalAberto(null);
@@ -196,10 +282,10 @@ export function PainelFerramentas() {
   return (
     <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 relative">
       <h2 className="text-xl font-bold mb-4 text-gray-800 border-b pb-2">🛠️ Ferramentas da Equipe</h2>
-      
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
         <button onClick={() => setModalAberto('chamados')} className={btnClass}>🆘 Chamados</button>
-        <button onClick={() => setModalAberto('atendimentos')} className={btnClass}>📝 Atendimentos</button>
+        <button onClick={() => { buscarPendentes(); setModalAberto('atendimentos') }} className={btnClass}>📝 Atendimentos</button>
         <button onClick={() => setModalAberto('hextras')} className={btnClass}>⏰ H. Extras</button>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -210,8 +296,6 @@ export function PainelFerramentas() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
         <button onClick={() => setModalAberto('lanche')} className={btnClass}>🍔 Lanche</button>
       </div>
-
-      {/* --- MODAIS DE FERRAMENTAS --- */}
 
       {modalAberto === 'sugestao' && (
         <div className="fixed inset-0 z-50 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -229,10 +313,10 @@ export function PainelFerramentas() {
       {modalAberto === 'chamados' && (
         <div className="fixed inset-0 z-50 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl p-6 border border-gray-200">
-            <h3 className="text-xl font-extrabold text-rose-600 mb-4">🆘 Rascunho de Chamado/Jira</h3>
+            <h3 className="text-xl font-extrabold text-rose-600 mb-4">🆘 Rascunho de Chamado</h3>
             <textarea value={chamadoTexto} onChange={(e) => setChamadoTexto(e.target.value)} className={`${inputClass} h-48 focus:ring-rose-500`} placeholder="Cole os dados do erro, prints, links..." />
             <div className="flex gap-2 mt-4">
-              <button disabled={loading || !chamadoTexto} onClick={() => dispararN8n("CHAMADOS", { texto: chamadoTexto }, `🆘 **Chamado/Jira**\n👤 **Autor:** ${meuLogin}\n\n📝 **Texto:**\n${chamadoTexto}`, () => setChamadoTexto(''))} className="flex-1 bg-rose-500 text-white font-bold py-3 rounded-xl shadow-md disabled:opacity-50">Enviar Chamado</button>
+              <button disabled={loading || !chamadoTexto} onClick={() => dispararN8n("CHAMADOS", { texto: chamadoTexto }, `🆘 **Chamado**\n👤 **Autor:** ${meuLogin}\n\n📝 **Texto:**\n${chamadoTexto}`, () => setChamadoTexto(''))} className="flex-1 bg-rose-500 text-white font-bold py-3 rounded-xl shadow-md disabled:opacity-50">Enviar Chamado</button>
               <button onClick={() => setModalAberto(null)} className="flex-1 bg-gray-200 text-gray-800 font-bold py-3 rounded-xl">Cancelar</button>
             </div>
           </div>
@@ -263,6 +347,74 @@ export function PainelFerramentas() {
         <div className="fixed inset-0 z-50 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl p-6 border border-gray-200 max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-extrabold text-blue-600 mb-4 flex items-center gap-2">📝 Registro de Atendimentos</h3>
+
+            {/* ── Bastões pendentes ── */}
+            {bastoesPendentes.length > 0 && (
+              <div className="mb-5">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-sm font-extrabold text-yellow-700">⏳ Bastões pendentes de registro</span>
+                  <span className="bg-yellow-400 text-white font-black text-xs px-2 py-0.5 rounded-full">{bastoesPendentes.length}</span>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {bastoesPendentes.map(rot => {
+                    const fmtData = new Date(rot.data_hora).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                    const expandido = pendenteExpandido === rot.id
+                    return (
+                      <div key={rot.id} className="border-2 border-yellow-300 bg-yellow-50 rounded-xl overflow-hidden">
+                        <button
+                          onClick={() => setPendenteExpandido(expandido ? null : rot.id)}
+                          className="w-full flex items-center justify-between p-3 hover:bg-yellow-100 transition-all text-left"
+                        >
+                          <div>
+                            <span className="text-xs bg-yellow-200 text-yellow-800 font-bold px-2 py-0.5 rounded-full mr-2">{rot.equipe}</span>
+                            <span className="text-sm font-bold text-gray-700">Passou para {rot.para_consultor}</span>
+                            <span className="text-xs text-gray-400 ml-2">{fmtData}</span>
+                          </div>
+                          <span className="text-gray-400 text-lg">{expandido ? '▲' : '▼'}</span>
+                        </button>
+                        {expandido && (
+                          <div className="border-t border-yellow-200 p-3 bg-white">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className={labelClass}>Usuário:</label>
+                                <select value={pendAtdUsuario} onChange={e => setPendAtdUsuario(e.target.value)} className={inputClass}>{usuarioOptions.map(o => <option key={o}>{o}</option>)}</select>
+                              </div>
+                              <div>
+                                <label className={labelClass}>Sistema:</label>
+                                <select value={pendAtdSistema} onChange={e => setPendAtdSistema(e.target.value)} className={inputClass}>{sistemaOptions.map(o => <option key={o}>{o}</option>)}</select>
+                              </div>
+                            </div>
+                            <label className={labelClass}>Setor:</label>
+                            <input type="text" value={pendAtdSetor} onChange={e => setPendAtdSetor(e.target.value)} className={inputClass} placeholder="Ex: 3ª Vara Cível..." />
+                            <label className={labelClass}>Descrição: *</label>
+                            <input type="text" value={pendAtdDescricao} onChange={e => setPendAtdDescricao(e.target.value)} className={inputClass} placeholder="Descreva o atendimento..." />
+                            <div className="grid grid-cols-2 gap-2 mt-1">
+                              <div>
+                                <label className={labelClass}>Canal:</label>
+                                <select value={pendAtdCanal} onChange={e => setPendAtdCanal(e.target.value)} className={inputClass}>{canalOptions.map(o => <option key={o}>{o}</option>)}</select>
+                              </div>
+                              <div>
+                                <label className={labelClass}>Desfecho:</label>
+                                <select value={pendAtdDesfecho} onChange={e => setPendAtdDesfecho(e.target.value)} className={inputClass}>{desfechoOptions.map(o => <option key={o}>{o}</option>)}</select>
+                              </div>
+                            </div>
+                            <button
+                              disabled={loading || !pendAtdDescricao.trim()}
+                              onClick={() => handleRegistrarPendente(rot)}
+                              className="w-full mt-3 bg-green-500 hover:bg-green-600 text-white font-bold py-2.5 rounded-xl disabled:opacity-50 transition-all text-sm"
+                            >
+                              {loading ? 'Salvando...' : '✅ Registrar e zerar pendência'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="border-t border-gray-200 my-5" />
+                <p className="text-xs font-bold text-gray-500 mb-3">📋 Ou registre um novo atendimento avulso:</p>
+              </div>
+            )}
             <label className={labelClass}>Data:</label>
             <input type="date" value={atdData} onChange={(e) => setAtdData(e.target.value)} className={`${inputClass} focus:ring-blue-500`} />
             <label className={labelClass}>Usuário:</label>
@@ -271,16 +423,16 @@ export function PainelFerramentas() {
             <input type="text" value={atdSetor} onChange={(e) => setAtdSetor(e.target.value)} className={`${inputClass} focus:ring-blue-500`} />
             <label className={labelClass}>Sistema:</label>
             <select value={atdSistema} onChange={(e) => setAtdSistema(e.target.value)} className={`${inputClass} focus:ring-blue-500`}>{sistemaOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}</select>
-            <label className={labelClass}>Descrição:</label>
-            <input type="text" value={atdDescricao} onChange={(e) => setAtdDescricao(e.target.value)} className={`${inputClass} focus:ring-blue-500`} />
+            <label className={labelClass}>Descrição: *</label>
+            <input type="text" value={atdDescricao} onChange={(e) => setAtdDescricao(e.target.value)} className={`${inputClass} focus:ring-blue-500`} placeholder="Descreva o atendimento..." />
             <label className={labelClass}>Canal:</label>
             <select value={atdCanal} onChange={(e) => setAtdCanal(e.target.value)} className={`${inputClass} focus:ring-blue-500`}>{canalOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}</select>
             <label className={labelClass}>Desfecho:</label>
             <select value={atdDesfecho} onChange={(e) => setAtdDesfecho(e.target.value)} className={`${inputClass} focus:ring-blue-500`}>{desfechoOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}</select>
-            <label className={labelClass}>Jira:</label>
-            <input type="text" value={atdJira} onChange={(e) => setAtdJira(e.target.value)} className={`${inputClass} focus:ring-blue-500`} />
             <div className="flex gap-2 mt-6">
-              <button disabled={loading || !atdDescricao} onClick={() => dispararN8n("ATENDIMENTOS", { data: formatarDataBR(atdData), usuario: atdUsuario, setor: atdSetor, sistema: atdSistema, descricao: atdDescricao, canal: atdCanal, desfecho: atdDesfecho, jira: atdJira }, `📝 **Novo Atendimento**\n👤 **Consultor:** ${meuLogin}\n📅 **Data:** ${formatarDataBR(atdData)}\n🧑‍💼 **Usuário:** ${atdUsuario}\n🏢 **Setor:** ${atdSetor}\n💻 **Sistema:** ${atdSistema}\n📋 **Descrição:** ${atdDescricao}\n📞 **Canal:** ${atdCanal}\n✅ **Desfecho:** ${atdDesfecho}\n🎫 **Jira:** ${atdJira}`, () => { setAtdDescricao(''); setAtdSetor(''); setAtdJira(''); })} className="flex-1 bg-blue-500 text-white font-bold py-3 rounded-xl shadow-md disabled:opacity-50">Registrar Atendimento</button>
+              <button disabled={loading || !atdDescricao} onClick={handleRegistrarAtendimento} className="flex-1 bg-blue-500 text-white font-bold py-3 rounded-xl shadow-md disabled:opacity-50">
+                {loading ? 'Salvando...' : 'Registrar Atendimento'}
+              </button>
               <button onClick={() => setModalAberto(null)} className="flex-1 bg-gray-200 text-gray-800 font-bold py-3 rounded-xl">Cancelar</button>
             </div>
           </div>
@@ -311,35 +463,27 @@ export function PainelFerramentas() {
         <div className="fixed inset-0 z-50 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl p-6 border border-gray-200 max-h-[90vh] overflow-y-auto">
             <h3 className="text-2xl font-extrabold text-indigo-700 mb-6 flex items-center gap-2">🖨️ Registro de Certidão (2026)</h3>
-            
             <label className={labelClass}>Data(s) do Evento:</label>
             <div className="flex flex-col gap-2 mb-3">
               {certDatas.map((d, i) => (
                 <div key={i} className="flex items-center gap-2">
                   <input type="date" value={d} onChange={(e) => { const novas = [...certDatas]; novas[i] = e.target.value; setCertDatas(novas); }} className={`${inputClass} flex-1 focus:ring-indigo-500`} />
-                  {certDatas.length > 1 && (
-                    <button type="button" onClick={() => setCertDatas(certDatas.filter((_, idx) => idx !== i))} className="text-red-500 hover:text-red-700 font-black text-xl px-2" title="Remover data">✕</button>
-                  )}
+                  {certDatas.length > 1 && (<button type="button" onClick={() => setCertDatas(certDatas.filter((_, idx) => idx !== i))} className="text-red-500 hover:text-red-700 font-black text-xl px-2" title="Remover data">✕</button>)}
                 </div>
               ))}
-              <button type="button" onClick={() => setCertDatas([...certDatas, hoje])} className="self-start text-sm font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 mt-1">
-                ➕ Adicionar outra data
-              </button>
+              <button type="button" onClick={() => setCertDatas([...certDatas, hoje])} className="self-start text-sm font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 mt-1">➕ Adicionar outra data</button>
             </div>
-            
             <label className={labelClass}>Tipo do Modelo:</label>
             <select value={certTipo} onChange={(e) => setCertTipo(e.target.value)} className={`${inputClass} mb-3 focus:ring-indigo-500 font-bold text-indigo-800`}>
               <option value="Geral">Geral (Indisponibilidade)</option>
               <option value="Física">Física (Recomenda autos físicos)</option>
               <option value="Eletrônica">Eletrônica (Peticionamento comum)</option>
             </select>
-            
-            <label className={labelClass}>Motivo/Detalhes (Necessário para a certidão "Geral"):</label>
-            <textarea value={certMotivo} onChange={(e) => setCertMotivo(e.target.value)} className={`${inputClass} h-20 mb-3 focus:ring-indigo-500 resize-none`} placeholder="Detalhes do erro, ex: superior a uma hora, a partir de 20:30h..." />
-
+            <label className={labelClass}>Motivo/Detalhes:</label>
+            <textarea value={certMotivo} onChange={(e) => setCertMotivo(e.target.value)} className={`${inputClass} h-20 mb-3 focus:ring-indigo-500 resize-none`} placeholder="Detalhes do erro..." />
             <div className="grid grid-cols-2 gap-4 mb-3">
               <div>
-                <label className={labelClass}>Processo (Com pontuação):</label>
+                <label className={labelClass}>Processo:</label>
                 <input type="text" value={certProcesso} onChange={(e) => setCertProcesso(e.target.value)} className={`${inputClass} focus:ring-indigo-500`} placeholder="Ex: 5001234-56..." />
               </div>
               <div>
@@ -347,11 +491,10 @@ export function PainelFerramentas() {
                 <input type="text" value={certIncidente} onChange={(e) => setCertIncidente(e.target.value)} className={`${inputClass} focus:ring-indigo-500`} placeholder="Ex: CH321..." />
               </div>
             </div>
-
             <div className="grid grid-cols-2 gap-4 mb-6">
               <div>
                 <label className={labelClass}>Nome da Parte/Advogado:</label>
-                <input type="text" value={certParte} onChange={(e) => setCertParte(e.target.value)} className={`${inputClass} focus:ring-indigo-500`} placeholder="Nome completo..." />
+                <input type="text" value={certParte} onChange={(e) => setCertParte(e.target.value)} className={`${inputClass} focus:ring-indigo-500`} />
               </div>
               <div>
                 <label className={labelClass}>Tipo de Petição:</label>
@@ -362,27 +505,11 @@ export function PainelFerramentas() {
                 </select>
               </div>
             </div>
-
             <div className="flex gap-4">
-              <button 
-                onClick={handleGerarWord} 
-                className="flex-1 bg-white border-2 border-gray-200 hover:bg-gray-50 text-gray-700 font-bold py-4 rounded-xl shadow-sm transition-transform active:scale-95 flex items-center justify-center gap-2"
-              >
-                📄 Apenas Baixar Word
-              </button>
-              
-              <button 
-                disabled={loading} 
-                onClick={handleSalvarENotificar} 
-                className="flex-[2] bg-[#FF4B4B] hover:bg-red-600 text-white font-bold py-4 rounded-xl shadow-md transition-transform active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {loading ? 'Salvando...' : '💾 Salvar e Mandar pro n8n'}
-              </button>
+              <button onClick={handleGerarWord} className="flex-1 bg-white border-2 border-gray-200 hover:bg-gray-50 text-gray-700 font-bold py-4 rounded-xl shadow-sm transition-transform active:scale-95 flex items-center justify-center gap-2">📄 Apenas Baixar Word</button>
+              <button disabled={loading} onClick={handleSalvarENotificar} className="flex-[2] bg-[#FF4B4B] hover:bg-red-600 text-white font-bold py-4 rounded-xl shadow-md transition-transform active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2">{loading ? 'Salvando...' : '💾 Salvar e Mandar pro n8n'}</button>
             </div>
-            
-            <button onClick={() => setModalAberto(null)} className="mt-4 px-6 py-2 bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-lg font-bold text-sm transition-colors border border-gray-300">
-              ❌ Cancelar
-            </button>
+            <button onClick={() => setModalAberto(null)} className="mt-4 px-6 py-2 bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-lg font-bold text-sm transition-colors border border-gray-300">❌ Cancelar</button>
           </div>
         </div>
       )}
@@ -392,21 +519,9 @@ export function PainelFerramentas() {
           <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl p-6 border border-gray-200">
             <h3 className="text-xl font-extrabold text-amber-600 mb-4 flex items-center gap-2">🍔 Pedido de Lanche</h3>
             <label className={labelClass}>Lanche:</label>
-            <input
-              type="text"
-              value={lancheItem}
-              onChange={(e) => setLancheItem(e.target.value)}
-              className={`${inputClass} focus:ring-amber-500`}
-              placeholder="Ex: X-Burguer, Coxinha..."
-            />
+            <input type="text" value={lancheItem} onChange={(e) => setLancheItem(e.target.value)} className={`${inputClass} focus:ring-amber-500`} placeholder="Ex: X-Burguer, Coxinha..." />
             <label className={labelClass}>Estabelecimento:</label>
-            <input
-              type="text"
-              value={lancheEstabelecimento}
-              onChange={(e) => setLancheEstabelecimento(e.target.value)}
-              className={`${inputClass} focus:ring-amber-500`}
-              placeholder="Ex: Lanchonete do João..."
-            />
+            <input type="text" value={lancheEstabelecimento} onChange={(e) => setLancheEstabelecimento(e.target.value)} className={`${inputClass} focus:ring-amber-500`} placeholder="Ex: Lanchonete do João..." />
             <div className="flex gap-2 mt-6">
               <button
                 disabled={loading || !lancheItem || !lancheEstabelecimento}
@@ -419,19 +534,10 @@ export function PainelFerramentas() {
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({ mensagem_whatsapp, consultor: meuLogin, lanche: lancheItem, estabelecimento: lancheEstabelecimento, timestamp: new Date().toISOString() })
                     })
-                    if (res.ok) {
-                      alert("✅ Pedido de lanche enviado!")
-                      setModalAberto(null)
-                      setLancheItem('')
-                      setLancheEstabelecimento('')
-                    } else {
-                      alert("❌ Falha ao enviar para o n8n.")
-                    }
-                  } catch {
-                    alert("❌ Erro inesperado ao enviar.")
-                  } finally {
-                    setLoading(false)
-                  }
+                    if (res.ok) { alert("✅ Pedido de lanche enviado!"); setModalAberto(null); setLancheItem(''); setLancheEstabelecimento('') }
+                    else { alert("❌ Falha ao enviar para o n8n.") }
+                  } catch { alert("❌ Erro inesperado ao enviar.") }
+                  finally { setLoading(false) }
                 }}
                 className="flex-1 bg-amber-500 text-white font-bold py-3 rounded-xl shadow-md disabled:opacity-50"
               >
@@ -442,7 +548,6 @@ export function PainelFerramentas() {
           </div>
         </div>
       )}
-
     </div>
   )
 }
