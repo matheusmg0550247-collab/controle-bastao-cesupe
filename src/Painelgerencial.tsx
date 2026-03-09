@@ -144,7 +144,7 @@ function AbaAuditoria() {
       {/* Gráfico bastões hoje vs ontem */}
       {bastaoChart.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-          <h3 className="text-sm font-extrabold text-gray-700 mb-4">🔥 Registros por Consultor — Hoje vs Ontem</h3>
+          <h3 className="text-sm font-extrabold text-gray-700 mb-4">🔥 Bastões por Consultor — Hoje vs Ontem</h3>
           <div style={{ height: Math.max(220, bastaoChart.length * 36) }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={bastaoChart} layout="vertical" margin={{ left: 0, right: 36 }}>
@@ -383,7 +383,7 @@ function AbaGeral({ perfil = 'Gestor' }: { perfil?: string }) {
 
       {/* Barras mensais — EPROC vs Legados */}
       <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-        <h3 className="text-sm font-extrabold text-gray-700 mb-4">📈 Registros Gerais por Mês — {ano}</h3>
+        <h3 className="text-sm font-extrabold text-gray-700 mb-4">📈 Bastões por Mês — {ano}</h3>
         <div style={{ height: 280 }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={porMes} margin={{ left: 0, right: 10 }}>
@@ -617,7 +617,7 @@ function AbaDiario() {
       {/* Gráfico — só quem tem dado */}
       {comDados.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-          <h3 className="text-sm font-extrabold text-gray-700 mb-1">📊 Registros por Consultor</h3>
+          <h3 className="text-sm font-extrabold text-gray-700 mb-1">📊 Bastões por Consultor</h3>
           <p className="text-xs text-gray-400 mb-4">
             <span className="font-black text-red-500">{ptDate(data1)}</span> vs <span className="font-black text-gray-400">{ptDate(data2)}</span>
           </p>
@@ -879,7 +879,7 @@ function AbaSemanal() {
 
       {/* Gráfico de colunas — 2 semanas lado a lado */}
       <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-        <h3 className="text-sm font-extrabold text-gray-700 mb-4">📆 Registros Diários por Semana</h3>
+        <h3 className="text-sm font-extrabold text-gray-700 mb-4">📆 Bastões, Atendimentos e Chat por Semana</h3>
         <div style={{ height: 360 }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={grafData} margin={{ left: 0, right: 10, bottom: 10 }} barCategoryGap="30%" barGap={3}>
