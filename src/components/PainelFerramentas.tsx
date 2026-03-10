@@ -26,6 +26,7 @@ export function PainelFerramentas() {
 
   const [atdData, setAtdData] = useState(hoje)
   const [atdUsuario, setAtdUsuario] = useState('Cartório')
+  const [atdNome, setAtdNome] = useState('')
   const [atdSetor, setAtdSetor] = useState('')
   const [atdSistema, setAtdSistema] = useState('Conveniados')
   const [atdDescricao, setAtdDescricao] = useState('')
@@ -34,7 +35,7 @@ export function PainelFerramentas() {
   // REMOVIDO: atdJira
 
   const usuarioOptions = ["Cartório", "Gabinete", "Público Externo", "Interno", "Outros"]
-  const sistemaOptions = ["Eproc", "JPE", "PJe", "SEI", "Conveniados", "Outros"]
+  const sistemaOptions = ["Eproc", "JPE", "PJe", "SEI", "Themis", "Conveniados", "Outros"]
   const canalOptions   = ["Whatsapp", "Telefone", "Presencial", "E-mail", "Outros"]
   const desfechoOptions = ["Resolvido - Cesupe", "Encaminhado N2", "Encaminhado N3", "Aguardando Usuário", "Outros"]
 
@@ -68,6 +69,7 @@ export function PainelFerramentas() {
 
   // Form inline de cada pendência
   const [pendAtdUsuario,   setPendAtdUsuario]   = useState('Público Externo')
+  const [pendAtdNome,      setPendAtdNome]      = useState('')
   const [pendAtdSetor,     setPendAtdSetor]     = useState('')
   const [pendAtdSistema,   setPendAtdSistema]   = useState('JPE')
   const [pendAtdDescricao, setPendAtdDescricao] = useState('')
@@ -109,7 +111,7 @@ export function PainelFerramentas() {
           data: dataRot,
           consultor: rot.de_consultor,   // ← sempre o dono do bastão
           usuario: pendAtdUsuario,
-          nome_setor: pendAtdSetor,
+          nome_setor: [pendAtdNome.trim(), pendAtdSetor.trim()].filter(Boolean).join(' — '),
           sistema: pendAtdSistema,
           descricao: pendAtdDescricao,
           canal: pendAtdCanal,
@@ -125,7 +127,7 @@ export function PainelFerramentas() {
         .eq('id', rot.id)
       alert('✅ Atendimento registrado e pendência zerada!')
       setPendenteExpandido(null)
-      setPendAtdDescricao(''); setPendAtdSetor('')
+      setPendAtdDescricao(''); setPendAtdSetor(''); setPendAtdNome('')
       // lista atualiza via realtime, mas forçamos também
       await buscarPendentes()
     } catch { alert('❌ Erro ao registrar.') }
@@ -165,7 +167,7 @@ export function PainelFerramentas() {
         data: atdData,
         consultor: meuLogin,
         usuario: atdUsuario,
-        nome_setor: atdSetor,
+        nome_setor: [atdNome.trim(), atdSetor.trim()].filter(Boolean).join(' — '),
         sistema: atdSistema,
         descricao: atdDescricao,
         canal: atdCanal,
@@ -175,12 +177,12 @@ export function PainelFerramentas() {
       if (error) throw error
 
       // 2. Envia pro n8n
-      const msg = `📝 **Novo Atendimento**\n👤 **Consultor:** ${meuLogin}\n📅 **Data:** ${formatarDataBR(atdData)}\n🧑‍💼 **Usuário:** ${atdUsuario}\n🏢 **Setor:** ${atdSetor}\n💻 **Sistema:** ${atdSistema}\n📋 **Descrição:** ${atdDescricao}\n📞 **Canal:** ${atdCanal}\n✅ **Desfecho:** ${atdDesfecho}`
-      await enviarRegistroN8n("ATENDIMENTOS", { data: formatarDataBR(atdData), usuario: atdUsuario, setor: atdSetor, sistema: atdSistema, descricao: atdDescricao, canal: atdCanal, desfecho: atdDesfecho }, msg)
+      const msg = `📝 **Novo Atendimento**\n👤 **Consultor:** ${meuLogin}\n📅 **Data:** ${formatarDataBR(atdData)}\n🧑‍💼 **Usuário:** ${atdUsuario}\n🏢 **Nome/Setor:** ${[atdNome.trim(), atdSetor.trim()].filter(Boolean).join(' — ')}\n💻 **Sistema:** ${atdSistema}\n📋 **Descrição:** ${atdDescricao}\n📞 **Canal:** ${atdCanal}\n✅ **Desfecho:** ${atdDesfecho}`
+      await enviarRegistroN8n("ATENDIMENTOS", { data: formatarDataBR(atdData), usuario: atdUsuario, nome: atdNome, setor: atdSetor, sistema: atdSistema, descricao: atdDescricao, canal: atdCanal, desfecho: atdDesfecho }, msg)
 
       alert('✅ Atendimento registrado!')
       setModalAberto(null)
-      setAtdDescricao(''); setAtdSetor('')
+      setAtdDescricao(''); setAtdSetor(''); setAtdNome('')
     } catch (err) {
       console.error(err)
       alert('❌ Erro ao salvar atendimento no banco.')
@@ -386,6 +388,8 @@ export function PainelFerramentas() {
                             </div>
                             <label className={labelClass}>Setor:</label>
                             <input type="text" value={pendAtdSetor} onChange={e => setPendAtdSetor(e.target.value)} className={inputClass} placeholder="Ex: 3ª Vara Cível..." />
+                            <label className={labelClass}>Nome:</label>
+                            <input type="text" value={pendAtdNome} onChange={e => setPendAtdNome(e.target.value)} className={inputClass} placeholder="Nome do solicitante..." />
                             <label className={labelClass}>Descrição: *</label>
                             <input type="text" value={pendAtdDescricao} onChange={e => setPendAtdDescricao(e.target.value)} className={inputClass} placeholder="Descreva o atendimento..." />
                             <div className="grid grid-cols-2 gap-2 mt-1">
@@ -419,6 +423,8 @@ export function PainelFerramentas() {
             <input type="date" value={atdData} onChange={(e) => setAtdData(e.target.value)} className={`${inputClass} focus:ring-blue-500`} />
             <label className={labelClass}>Usuário:</label>
             <select value={atdUsuario} onChange={(e) => setAtdUsuario(e.target.value)} className={`${inputClass} focus:ring-blue-500`}>{usuarioOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}</select>
+            <label className={labelClass}>Nome:</label>
+            <input type="text" value={atdNome} onChange={(e) => setAtdNome(e.target.value)} className={`${inputClass} focus:ring-blue-500`} placeholder="Nome do solicitante..." />
             <label className={labelClass}>Setor:</label>
             <input type="text" value={atdSetor} onChange={(e) => setAtdSetor(e.target.value)} className={`${inputClass} focus:ring-blue-500`} />
             <label className={labelClass}>Sistema:</label>

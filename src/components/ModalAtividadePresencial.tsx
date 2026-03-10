@@ -126,9 +126,19 @@ export function ModalAtividadePresencial() {
         })
         if (error) throw error
 
-        // Mostra sucesso brevemente
         setEtapa('sucesso')
         await new Promise(r => setTimeout(r, 1400))
+      } else {
+        // Pular: cria registro pendente em bastao_rotacoes (igual ao passar bastão)
+        // O consultor verá no badge e em Ferramentas → Atendimentos para registrar depois
+        const equipe = getEquipe(consultor) ?? 'EPROC'
+        await supabase.from('bastao_rotacoes').insert({
+          equipe,
+          de_consultor:    consultor,
+          para_consultor:  consultor,   // auto-referência indica "registro próprio pendente"
+          data_hora:       new Date().toISOString(),
+          registro_status: 'depois',
+        })
       }
 
       // Se veio de PainelStatus (troca de status) — aplica próximo e fecha
@@ -288,7 +298,7 @@ export function ModalAtividadePresencial() {
                   onClick={() => handleSalvar(true)}
                   className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-3 rounded-xl text-sm transition-all"
                 >
-                  Pular
+                  ⏳ Depois
                 </button>
               </div>
             </div>

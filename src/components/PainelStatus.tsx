@@ -132,6 +132,7 @@ export function PainelStatus() {
         <button onClick={() => handleAbrirModal('Lanche', false)}             className={`${btnBase} ${btnAtivo('Lanche')}`}>🍔 Lanche</button>
         <button onClick={() => handleAbrirModal('Sessão', false)}             className={`${btnBase} ${btnAtivo('Sessão')}`}>🎙️ Sessão</button>
         <button onClick={() => handleAbrirModal('Atend. Presencial', false)}  className={`${btnBase} ${btnAtivo('Atend. Presencial')}`}>🤝 Presencial</button>
+        <button onClick={() => handleAbrirModal('Saída Rápida', false)}       className={`${btnBase} ${btnAtivo('Saída Rápida')}`}>🚪 Saída Rápida</button>
         <button onClick={handleAbrirLogmein} className={`${btnBase} bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100`}>💻 LogMeIn</button>
       </div>
 

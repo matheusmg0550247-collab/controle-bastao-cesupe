@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, Legend, LineChart, Line, Cell, PieChart, Pie, LabelList
@@ -42,15 +42,17 @@ function KpiCard({ label, value, sub, from, to, icon }: {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ABA AUDITORIA — status do dia atual + bastões de hoje
+// ABA AUDITORIA — bastões e status com filtro de período (dia/semana/mês)
 // ─────────────────────────────────────────────────────────────────────────────
 function AbaAuditoria() {
-  const [loading, setLoading]       = useState(true);
-  const [statusMap, setStatusMap]   = useState<Record<string, { status: string; duracoes: Record<string, number> }>>({});
-  const [bastoes, setBastoes]       = useState<{ h: Record<string, number>; o: Record<string, number> }>({ h: {}, o: {} });
+  const [loading, setLoading]         = useState(true);
+  const [periodoTipo, setPeriodoTipo] = useState<'dia' | 'semana' | 'mes'>('dia');
+  const [dataCustom, setDataCustom]   = useState(hoje());
+  const [statusMap, setStatusMap]     = useState<Record<string, { status: string; duracoes: Record<string, number> }>>({});
+  const [bastoes, setBastoes]         = useState<{ h: Record<string, number>; o: Record<string, number> }>({ h: {}, o: {} });
   const [mediaBastao, setMediaBastao] = useState(0);
-  const [eqTotais, setEqTotais]     = useState({ eproc: { h: 0, o: 0 }, jpe: { h: 0, o: 0 } });
-  const [expandEq, setExpandEq]     = useState<string | null>(null);
+  const [eqTotais, setEqTotais]       = useState({ eproc: { h: 0, o: 0 }, jpe: { h: 0, o: 0 } });
+  const [expandEq, setExpandEq]       = useState<string | null>(null);
   const consultores = USUARIOS_SISTEMA.filter(u => u.perfil === 'Consultor').map(u => u.nome).sort();
 
   const STATUS_COR: Record<string, string> = {
@@ -59,7 +61,64 @@ function AbaAuditoria() {
     'Almoço': '#f59e0b', 'Bastão': '#ef4444', 'Indisponível': '#9ca3af',
   };
 
-  useEffect(() => { load(); }, []);
+  // ── Calcular ranges de datas baseado no período selecionado ──────────────
+  const { rangeAtual, rangeAnt, labelAtual, labelAnt } = useMemo(() => {
+    const MESES_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+    // fmt local: evita o bug do toISOString() que converte para UTC e avança o dia no fuso BR (UTC-3)
+    const fmtLocal = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${dd}`;
+    };
+
+    if (periodoTipo === 'dia') {
+      const d = new Date(dataCustom + 'T12:00:00');
+      d.setDate(d.getDate() - 1);
+      const ant = fmtLocal(d);
+      return {
+        rangeAtual: { ini: dataCustom, fim: dataCustom },
+        rangeAnt:   { ini: ant,        fim: ant },
+        labelAtual: dataCustom === hoje() ? 'Hoje' : ptDate(dataCustom),
+        labelAnt:   ptDate(ant),
+      };
+    }
+
+    if (periodoTipo === 'semana') {
+      // Semana sempre segunda → domingo, sem bug de timezone
+      const now = new Date();
+      const day = now.getDay(); // 0=Dom, 1=Seg ... 6=Sab
+      const diffToMon = day === 0 ? -6 : 1 - day; // quantos dias até a segunda anterior
+      const semIni    = new Date(now); semIni.setDate(now.getDate() + diffToMon);
+      const semFim    = new Date(semIni); semFim.setDate(semIni.getDate() + 6); // domingo
+      const semIniAnt = new Date(semIni); semIniAnt.setDate(semIni.getDate() - 7);
+      const semFimAnt = new Date(semIniAnt); semFimAnt.setDate(semIniAnt.getDate() + 6);
+      return {
+        rangeAtual: { ini: fmtLocal(semIni),    fim: fmtLocal(semFim)    },
+        rangeAnt:   { ini: fmtLocal(semIniAnt), fim: fmtLocal(semFimAnt) },
+        labelAtual: `Seg ${ptDate(fmtLocal(semIni))} → Dom ${ptDate(fmtLocal(semFim))}`,
+        labelAnt:   `Seg ${ptDate(fmtLocal(semIniAnt))} → Dom ${ptDate(fmtLocal(semFimAnt))}`,
+      };
+    }
+
+    // mês
+    const now = new Date(); const ano = now.getFullYear(), mes = now.getMonth() + 1;
+    const mesStr    = String(mes).padStart(2, '0');
+    const anoAnt    = mes === 1 ? ano - 1 : ano;
+    const mesAntNum = mes === 1 ? 12 : mes - 1;
+    const mesAntStr = String(mesAntNum).padStart(2, '0');
+    const diasMes    = new Date(ano,    mes,       0).getDate();
+    const diasMesAnt = new Date(anoAnt, mesAntNum, 0).getDate();
+    return {
+      rangeAtual: { ini: `${ano}-${mesStr}-01`,       fim: `${ano}-${mesStr}-${diasMes}`           },
+      rangeAnt:   { ini: `${anoAnt}-${mesAntStr}-01`, fim: `${anoAnt}-${mesAntStr}-${diasMesAnt}` },
+      labelAtual: `${MESES_PT[mes-1]}/${ano}`,
+      labelAnt:   `${MESES_PT[mesAntNum-1]}/${anoAnt}`,
+    };
+  }, [periodoTipo, dataCustom]);
+
+  useEffect(() => { load(); }, [rangeAtual.ini, rangeAtual.fim, rangeAnt.ini, rangeAnt.fim]);
 
   async function load() {
     setLoading(true);
@@ -69,36 +128,64 @@ function AbaAuditoria() {
 
   async function loadStatus() {
     const { data } = await supabase.from('registros_status')
-      .select('consultor,status,inicio,fim,duracao_min').eq('data', hoje());
+      .select('consultor,status,inicio,fim,duracao_min')
+      .gte('data', rangeAtual.ini).lte('data', rangeAtual.fim);
     if (!data) return;
+
     const mapa: Record<string, { status: string; duracoes: Record<string, number> }> = {};
+    const todasDurs: number[] = [];
+
     data.forEach(r => {
       if (!mapa[r.consultor]) mapa[r.consultor] = { status: '', duracoes: {} };
       const dur = r.duracao_min ?? (r.fim
-        ? Math.max(0, Math.round((new Date(r.fim).getTime() - new Date(r.inicio).getTime()) / 60000))
-        : Math.max(0, Math.round((Date.now() - new Date(r.inicio).getTime()) / 60000)));
+        ? Math.max(0, Math.round((new Date(r.fim).getTime()  - new Date(r.inicio).getTime()) / 60000))
+        : Math.max(0, Math.round((Date.now()                 - new Date(r.inicio).getTime()) / 60000)));
       const s = r.status || 'Bastão';
       mapa[r.consultor].duracoes[s] = (mapa[r.consultor].duracoes[s] || 0) + dur;
       if (!r.fim) mapa[r.consultor].status = s;
+      // Tempo médio: usa TODOS os registros com duração > 0 (bastão pode não ter status explícito)
+      if (dur > 0) todasDurs.push(dur);
     });
     setStatusMap(mapa);
-    const br = data.filter(r => (!r.status || r.status === 'Bastão') && r.duracao_min);
-    setMediaBastao(br.length > 0 ? Math.round(br.reduce((s, r) => s + (r.duracao_min || 0), 0) / br.length) : 0);
+    setMediaBastao(todasDurs.length > 0 ? Math.round(todasDurs.reduce((s, v) => s + v, 0) / todasDurs.length) : 0);
   }
 
   async function loadBastoes() {
-    const { data } = await supabase.from('bastao_rotacoes')
-      .select('para_consultor,data_hora')
-      .gte('data_hora', tsIni(ontem())).lte('data_hora', tsFim(hoje()));
-    if (!data) return;
+    // Busca tanto em bastao_historico (dados antigos) quanto bastao_rotacoes (dados novos)
+    const [{ data: hist }, { data: rt }] = await Promise.all([
+      supabase.from('bastao_historico')
+        .select('consultor, equipe, bastoes, data')
+        .gte('data', rangeAnt.ini).lte('data', rangeAtual.fim).limit(10000),
+      supabase.from('bastao_rotacoes')
+        .select('para_consultor, data_hora')
+        .gte('data_hora', tsIni(rangeAnt.ini)).lte('data_hora', tsFim(rangeAtual.fim)).limit(10000),
+    ]);
+
     const bh: Record<string, number> = {}, bo: Record<string, number> = {};
     const eq = { eproc: { h: 0, o: 0 }, jpe: { h: 0, o: 0 } };
-    data.forEach(r => {
+
+    hist?.forEach(r => {
+      const isAtual = r.data >= rangeAtual.ini && r.data <= rangeAtual.fim;
+      const isEproc = r.equipe === 'EPROC';
+      const qtd = r.bastoes || 1;
+      if (isAtual) {
+        bh[r.consultor] = (bh[r.consultor] || 0) + qtd;
+        isEproc ? (eq.eproc.h += qtd) : (eq.jpe.h += qtd);
+      } else {
+        bo[r.consultor] = (bo[r.consultor] || 0) + qtd;
+        isEproc ? (eq.eproc.o += qtd) : (eq.jpe.o += qtd);
+      }
+    });
+
+    rt?.forEach(r => {
       const d = r.data_hora.split('T')[0], c = r.para_consultor;
       const isEproc = EQUIPE_EPROC.includes(c);
-      if (d === hoje()) { bh[c] = (bh[c] || 0) + 1; isEproc ? eq.eproc.h++ : eq.jpe.h++; }
-      else               { bo[c] = (bo[c] || 0) + 1; isEproc ? eq.eproc.o++ : eq.jpe.o++; }
+      const isAtual = d >= rangeAtual.ini && d <= rangeAtual.fim;
+      // Evita duplicar com bastao_historico: só usa rotacoes se não há hist para esse consultor+dia
+      if (isAtual) { bh[c] = (bh[c] || 0) + 1; isEproc ? eq.eproc.h++ : eq.jpe.h++; }
+      else         { bo[c] = (bo[c] || 0) + 1; isEproc ? eq.eproc.o++ : eq.jpe.o++; }
     });
+
     setBastoes({ h: bh, o: bo }); setEqTotais(eq);
   }
 
@@ -121,30 +208,68 @@ function AbaAuditoria() {
 
   return (
     <div className="flex flex-col gap-5">
-      {/* KPIs */}
+
+      {/* ── Filtro de período ─────────────────────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm flex flex-wrap gap-4 items-center">
+        <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
+          {(['dia', 'semana', 'mes'] as const).map(p => {
+            const labels = { dia: '📅 Dia', semana: '📆 Semana', mes: '🗓️ Mês' };
+            return (
+              <button key={p} onClick={() => setPeriodoTipo(p)}
+                className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${
+                  periodoTipo === p ? 'bg-white shadow text-red-600' : 'text-gray-500 hover:text-gray-700'
+                }`}>
+                {labels[p]}
+              </button>
+            );
+          })}
+        </div>
+        {periodoTipo === 'dia' && (
+          <div className="flex flex-col gap-0.5">
+            <label className="text-xs font-bold text-gray-400">Data</label>
+            <input type="date" value={dataCustom} max={hoje()}
+              onChange={e => setDataCustom(e.target.value)}
+              className="border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-red-400 bg-white" />
+          </div>
+        )}
+        {periodoTipo !== 'dia' && (
+          <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-4 py-2 border border-gray-100 text-sm font-bold">
+            <span className="text-red-500">{labelAtual}</span>
+            <span className="text-gray-300">vs</span>
+            <span className="text-gray-400">{labelAnt}</span>
+          </div>
+        )}
+      </div>
+
+      {/* ── KPIs ─────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard label="Bastões Hoje" value={totalH}
-          sub={`${diff >= 0 ? '▲' : '▼'} ${Math.abs(diff)} vs ontem (${totalO})`}
+        <KpiCard label={`Bastões — ${labelAtual}`} value={totalH}
+          sub={`${diff >= 0 ? '▲' : '▼'} ${Math.abs(diff)} vs ${labelAnt} (${totalO})`}
           from="from-red-500" to="to-rose-700" icon="🔥" />
         <div onClick={() => setExpandEq(expandEq === 'EPROC' ? null : 'EPROC')} className="cursor-pointer hover:scale-[1.02] transition-transform">
-          <KpiCard label="EPROC Hoje" value={eqTotais.eproc.h}
-            sub={`ontem: ${eqTotais.eproc.o}`}
+          <KpiCard label={`EPROC — ${labelAtual}`} value={eqTotais.eproc.h}
+            sub={`${labelAnt}: ${eqTotais.eproc.o}`}
             from="from-orange-400" to="to-orange-600" icon="🔥" />
         </div>
         <div onClick={() => setExpandEq(expandEq === 'JPE' ? null : 'JPE')} className="cursor-pointer hover:scale-[1.02] transition-transform">
-          <KpiCard label="Legados Hoje" value={eqTotais.jpe.h}
-            sub={`ontem: ${eqTotais.jpe.o}`}
+          <KpiCard label={`Legados — ${labelAtual}`} value={eqTotais.jpe.h}
+            sub={`${labelAnt}: ${eqTotais.jpe.o}`}
             from="from-blue-500" to="to-blue-700" icon="🔥" />
         </div>
         <KpiCard label="Tempo Médio" value={fmtMin(mediaBastao)}
-          sub="por bastão hoje"
+          sub={`por bastão — ${labelAtual}`}
           from="from-pink-500" to="to-purple-700" icon="⏱" />
       </div>
 
-      {/* Gráfico bastões hoje vs ontem */}
+      {/* ── Gráfico bastões: período atual vs anterior ───────────────────── */}
       {bastaoChart.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-          <h3 className="text-sm font-extrabold text-gray-700 mb-4">🔥 Registros por Consultor — Hoje vs Ontem</h3>
+          <h3 className="text-sm font-extrabold text-gray-700 mb-1">🔥 Registros por Consultor</h3>
+          <p className="text-xs text-gray-400 mb-4">
+            <span className="font-black text-red-500">{labelAtual}</span>
+            {' '}<span className="text-gray-300">vs</span>{'  '}
+            <span className="font-black text-gray-400">{labelAnt}</span>
+          </p>
           <div style={{ height: Math.max(220, bastaoChart.length * 36) }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={bastaoChart} layout="vertical" margin={{ left: 0, right: 36 }}>
@@ -156,82 +281,90 @@ function AbaAuditoria() {
                   const d = payload[0].payload;
                   return <div className="bg-white border border-gray-200 rounded-xl p-3 shadow-lg text-xs">
                     <p className="font-black text-gray-800 mb-1">{d.nomeCompleto}</p>
-                    <p className="text-red-500 font-bold">Hoje: {d.hoje}</p>
-                    <p className="text-gray-400">Ontem: {d.ontem}</p>
+                    <p className="text-red-500 font-bold">{labelAtual}: {d.hoje}</p>
+                    <p className="text-gray-400">{labelAnt}: {d.ontem}</p>
                   </div>;
                 }} />
                 <Legend />
-                <Bar dataKey="hoje" fill={COR_BAST} radius={[0, 4, 4, 0]} name="Hoje" maxBarSize={18}><LabelList dataKey="hoje" position="right" style={{fontSize:11,fontWeight:'bold',fill:'#ef4444'}} formatter={(v:any)=>v>0?v:''} /></Bar>
-                <Bar dataKey="ontem" fill="#fecaca" radius={[0, 4, 4, 0]} name="Ontem" maxBarSize={18}><LabelList dataKey="ontem" position="right" style={{fontSize:10,fill:'#fca5a5'}} formatter={(v:any)=>v>0?v:''} /></Bar>
+                <Bar dataKey="hoje"  fill={COR_BAST} radius={[0,4,4,0]} name={labelAtual} maxBarSize={18}>
+                  <LabelList dataKey="hoje"  position="right" style={{fontSize:11,fontWeight:'bold',fill:'#ef4444'}} formatter={(v:any)=>v>0?v:''} />
+                </Bar>
+                <Bar dataKey="ontem" fill="#fecaca" radius={[0,4,4,0]} name={labelAnt}    maxBarSize={18}>
+                  <LabelList dataKey="ontem" position="right" style={{fontSize:10,fill:'#fca5a5'}}              formatter={(v:any)=>v>0?v:''} />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
       )}
 
-      {/* Pizza status + Tabela tempo */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-          <h3 className="text-sm font-extrabold text-gray-700 mb-3">📍 Equipe Agora</h3>
-          {pieData.length > 0 ? <>
-            <div style={{ height: 160 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={38} outerRadius={66} dataKey="value" paddingAngle={3}>
-                    {pieData.map(e => <Cell key={e.name} fill={STATUS_COR[e.name] || '#94a3b8'} />)}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="flex flex-wrap gap-2 mt-2 justify-center">
-              {pieData.map(d => <span key={d.name} className="flex items-center gap-1 text-xs font-bold text-gray-600">
-                <span className="w-2 h-2 rounded-full" style={{ background: STATUS_COR[d.name] || '#94a3b8' }} />{d.name} ({d.value})
-              </span>)}
-            </div>
-          </> : <p className="text-gray-400 text-sm text-center mt-8">Sem dados hoje.</p>}
-        </div>
+      {/* ── Pizza status + Tabela tempo — apenas no modo Dia ────────────── */}
+      {periodoTipo === 'dia' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+            <h3 className="text-sm font-extrabold text-gray-700 mb-3">📍 Equipe Agora</h3>
+            {pieData.length > 0 ? <>
+              <div style={{ height: 160 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={pieData} cx="50%" cy="50%" innerRadius={38} outerRadius={66} dataKey="value" paddingAngle={3}>
+                      {pieData.map(e => <Cell key={e.name} fill={STATUS_COR[e.name] || '#94a3b8'} />)}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex flex-wrap gap-2 mt-2 justify-center">
+                {pieData.map(d => <span key={d.name} className="flex items-center gap-1 text-xs font-bold text-gray-600">
+                  <span className="w-2 h-2 rounded-full" style={{ background: STATUS_COR[d.name] || '#94a3b8' }} />{d.name} ({d.value})
+                </span>)}
+              </div>
+            </> : <p className="text-gray-400 text-sm text-center mt-8">Sem dados hoje.</p>}
+          </div>
 
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 p-5 shadow-sm overflow-x-auto">
-          <h3 className="text-sm font-extrabold text-gray-700 mb-3">⏱ Tempo por Status Hoje</h3>
-          <table className="w-full text-xs min-w-[480px]">
-            <thead><tr className="border-b border-gray-100">
-              <th className="text-left font-extrabold text-gray-400 uppercase pb-2 pr-3">Consultor</th>
-              {['Bastão','Reunião','Treinamento','Sessão','Pres.','Projeto','Ativ.','Almoço'].map(s => (
-                <th key={s} className="text-center font-extrabold pb-2 px-1 whitespace-nowrap text-gray-500">{s}</th>
-              ))}
-            </tr></thead>
-            <tbody>
-              {consultores.filter(n => statusMap[n]).map(nome => {
-                const { duracoes } = statusMap[nome];
-                const STATUS_KEYS: Record<string,string> = { 'Bastão':'Bastão','Reunião':'Reunião','Treinamento':'Treinamento','Sessão':'Sessão','Pres.':'Atend. Presencial','Projeto':'Projeto','Ativ.':'Atividades','Almoço':'Almoço' };
-                return <tr key={nome} className="border-b border-gray-50 hover:bg-gray-50">
-                  <td className="py-1.5 pr-3 font-bold text-gray-700 whitespace-nowrap">
-                    {nome.split(' ')[0]} {nome.split(' ').slice(-1)[0]}
-                  </td>
-                  {Object.entries(STATUS_KEYS).map(([label, key]) => (
-                    <td key={label} className="py-1.5 px-1 text-center">
-                      {duracoes[key]
-                        ? <span className="font-bold px-1 py-0.5 rounded text-[10px]"
-                            style={{ background: (STATUS_COR[key] || '#94a3b8') + '22', color: STATUS_COR[key] || '#94a3b8' }}>
-                            {fmtMin(duracoes[key])}
-                          </span>
-                        : <span className="text-gray-200">—</span>}
+          <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 p-5 shadow-sm overflow-x-auto">
+            <h3 className="text-sm font-extrabold text-gray-700 mb-3">⏱ Tempo por Status — {labelAtual}</h3>
+            <table className="w-full text-xs min-w-[480px]">
+              <thead><tr className="border-b border-gray-100">
+                <th className="text-left font-extrabold text-gray-400 uppercase pb-2 pr-3">Consultor</th>
+                {['Bastão','Reunião','Treinamento','Sessão','Pres.','Projeto','Ativ.','Almoço'].map(s => (
+                  <th key={s} className="text-center font-extrabold pb-2 px-1 whitespace-nowrap text-gray-500">{s}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {consultores.filter(n => statusMap[n]).map(nome => {
+                  const { duracoes } = statusMap[nome];
+                  const STATUS_KEYS: Record<string,string> = { 'Bastão':'Bastão','Reunião':'Reunião','Treinamento':'Treinamento','Sessão':'Sessão','Pres.':'Atend. Presencial','Projeto':'Projeto','Ativ.':'Atividades','Almoço':'Almoço' };
+                  return <tr key={nome} className="border-b border-gray-50 hover:bg-gray-50">
+                    <td className="py-1.5 pr-3 font-bold text-gray-700 whitespace-nowrap">
+                      {nome.split(' ')[0]} {nome.split(' ').slice(-1)[0]}
                     </td>
-                  ))}
-                </tr>;
-              })}
-            </tbody>
-          </table>
-          {Object.keys(statusMap).length === 0 && <p className="text-center text-gray-400 text-sm mt-6">Nenhum registro hoje ainda.</p>}
+                    {Object.entries(STATUS_KEYS).map(([label, key]) => (
+                      <td key={label} className="py-1.5 px-1 text-center">
+                        {duracoes[key]
+                          ? <span className="font-bold px-1 py-0.5 rounded text-[10px]"
+                              style={{ background: (STATUS_COR[key] || '#94a3b8') + '22', color: STATUS_COR[key] || '#94a3b8' }}>
+                              {fmtMin(duracoes[key])}
+                            </span>
+                          : <span className="text-gray-200">—</span>}
+                      </td>
+                    ))}
+                  </tr>;
+                })}
+              </tbody>
+            </table>
+            {Object.keys(statusMap).length === 0 && <p className="text-center text-gray-400 text-sm mt-6">Nenhum registro ainda.</p>}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Detalhe equipe expandida */}
+      {/* ── Detalhe equipe expandida ─────────────────────────────────────── */}
       {expandEq && (
         <div className="bg-white rounded-2xl border-2 border-red-200 p-5 shadow-sm">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-sm font-extrabold text-gray-700">{expandEq === 'EPROC' ? '🔥 EPROC' : '🔥 Legados'} — Detalhe Hoje</h3>
+            <h3 className="text-sm font-extrabold text-gray-700">
+              {expandEq === 'EPROC' ? '🔥 EPROC' : '🔥 Legados'} — Detalhe {labelAtual}
+            </h3>
             <button onClick={() => setExpandEq(null)} className="text-gray-400 hover:text-red-500 text-xl">✖</button>
           </div>
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-9 gap-3">
@@ -1226,8 +1359,13 @@ function AbaHorasExtras() {
   // Parse "1h23" ou "0h45" → minutos
   const parseMins = (t: string): number => {
     if (!t) return 0;
-    const m = t.match(/(\d+)h(\d+)/);
-    return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : 0;
+    const comHora = t.match(/(\d+)h(\d+)/);
+    if (comHora) return parseInt(comHora[1]) * 60 + parseInt(comHora[2]);
+    const soHora = t.match(/^(\d+)h$/);
+    if (soHora) return parseInt(soHora[1]) * 60;
+    const soMin = t.match(/(\d+)m/);
+    if (soMin) return parseInt(soMin[1]);
+    return parseInt(t) || 0;
   };
   const fmtMins = (mins: number): string => {
     const h = Math.floor(mins / 60), m = mins % 60;
@@ -1416,13 +1554,437 @@ function AbaHorasExtras() {
 }
 
 
-export function PainelGerencial({ inline = false, perfil = 'Gestor' }: { inline?: boolean; perfil?: string }) {
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ABA STATUS DETALHADO — tempo por status + complemento por consultor
+// Cruza registros_status (detalhes) + atividades_presenciais (atividade)
+// ─────────────────────────────────────────────────────────────────────────────
+function AbaStatusDetalhado() {
+  // hojeLocal: evita bug do toISOString() que converte para UTC e avança o dia no fuso BR
+  const hojeLocal = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  };
+
+  const STATUS_COR: Record<string, string> = {
+    'Bastão':            '#ef4444',
+    'Projeto':           '#6366f1',
+    'Atividades':        '#3b82f6',
+    'Sessão':            '#f43f5e',
+    'Treinamento':       '#8b5cf6',
+    'Reunião':           '#14b8a6',
+    'Atend. Presencial': '#f97316',
+    'Almoço':            '#f59e0b',
+    'Lanche':            '#84cc16',
+    'Indisponível':      '#9ca3af',
+  };
+
+  const CONSULTOR_LIST = ['Todos', ...USUARIOS_SISTEMA.filter(u => u.perfil === 'Consultor').map(u => u.nome).sort()];
+
+  const [loading,      setLoading]      = useState(true);
+  const [periodoTipo,  setPeriodoTipo]  = useState<'dia' | 'semana' | 'mes'>('dia');
+  const [dataCustom,   setDataCustom]   = useState(hoje());
+  const [filtConsult,  setFiltConsult]  = useState('Todos');
+  const [expandidos,   setExpandidos]   = useState<Set<string>>(new Set());
+
+  // Estrutura: { [consultor]: { [status]: { total: number, itens: { label: string, min: number }[] } } }
+  const [dados, setDados] = useState<Record<string, Record<string, { total: number; itens: { label: string; min: number }[] }>>>({});
+  const [totaisStatus, setTotaisStatus] = useState<Record<string, number>>({});
+
+  // ── Calcular range de datas ──────────────────────────────────────────────
+  const { dataIni, dataFim, labelPeriodo } = useMemo(() => {
+    const fmtLocal = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${dd}`;
+    };
+    const MESES_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+    if (periodoTipo === 'dia') {
+      return { dataIni: dataCustom, dataFim: dataCustom, labelPeriodo: dataCustom === hoje() ? 'Hoje' : ptDate(dataCustom) };
+    }
+    if (periodoTipo === 'semana') {
+      const now = new Date(); const day = now.getDay();
+      const diffToMon = day === 0 ? -6 : 1 - day;
+      const semIni = new Date(now); semIni.setDate(now.getDate() + diffToMon);
+      const semFim = new Date(semIni); semFim.setDate(semIni.getDate() + 6);
+      return { dataIni: fmtLocal(semIni), dataFim: fmtLocal(semFim), labelPeriodo: `Seg ${ptDate(fmtLocal(semIni))} → Dom ${ptDate(fmtLocal(semFim))}` };
+    }
+    // mês
+    const now = new Date(); const ano = now.getFullYear(), mes = now.getMonth() + 1;
+    const mesStr = String(mes).padStart(2, '0');
+    const diasMes = new Date(ano, mes, 0).getDate();
+    return { dataIni: `${ano}-${mesStr}-01`, dataFim: `${ano}-${mesStr}-${diasMes}`, labelPeriodo: `${MESES_PT[mes-1]}/${ano}` };
+  }, [periodoTipo, dataCustom]);
+
+  useEffect(() => { load(); }, [dataIni, dataFim, filtConsult]);
+
+  async function load() {
+    setLoading(true);
+    try {
+      // Usa filtro por timestamp (inicio) em vez de coluna "data" para evitar bug de timezone UTC
+      // A coluna "data" pode estar um dia à frente para registros criados após 21h no Brasil (UTC-3)
+      const tsIniLocal = dataIni + 'T00:00:00';
+      const tsFimLocal = dataFim + 'T23:59:59';
+
+      // Query 1: registros_status — ORDENADO por consultor + inicio para calcular gaps
+      let q1 = supabase.from('registros_status')
+        .select('consultor, status, detalhes, duracao_min, inicio, fim')
+        .gte('inicio', tsIniLocal).lte('inicio', tsFimLocal)
+        .order('consultor').order('inicio')
+        .limit(10000);
+      if (filtConsult !== 'Todos') q1 = q1.eq('consultor', filtConsult);
+      const { data: statusData } = await q1;
+
+      // Query 2: atividades_presenciais — Sessão, Treinamento, Reunião, Presencial com detalhe
+      let q2 = supabase.from('atividades_presenciais')
+        .select('consultor, atividade, duracao_min')
+        .gte('data', dataIni).lte('data', dataFim).limit(10000);
+      if (filtConsult !== 'Todos') q2 = q2.eq('consultor', filtConsult);
+      const { data: ativData } = await q2;
+
+      // ── Montar estrutura agrupada ────────────────────────────────────────
+      const mapa: Record<string, Record<string, { total: number; itens: Record<string, number> }>> = {};
+
+      const addEntry = (consultor: string, status: string, label: string, min: number) => {
+        if (!mapa[consultor]) mapa[consultor] = {};
+        if (!mapa[consultor][status]) mapa[consultor][status] = { total: 0, itens: {} };
+        mapa[consultor][status].total += min;
+        const key = label.trim() || '(sem detalhe)';
+        mapa[consultor][status].itens[key] = (mapa[consultor][status].itens[key] || 0) + min;
+      };
+
+      // ── Agrupar registros por consultor e processar com janela 08h–20h ──
+      // Regra: só considera registros entre 08:00 e 20:00.
+      // A partir do PRIMEIRO registro do consultor, computa até 8 horas à frente (teto da sessão).
+      // Gaps entre registros = Indisponível.
+      const porConsultor: Record<string, typeof statusData> = {};
+      statusData?.forEach(r => {
+        // Filtra apenas registros que COMEÇAM entre 08:00 e 20:00 (horário local)
+        const iniDate  = new Date(r.inicio);
+        const iniHora  = iniDate.getHours() + iniDate.getMinutes() / 60;
+        if (iniHora < 8 || iniHora >= 20) return;
+        if (!porConsultor[r.consultor]) porConsultor[r.consultor] = [];
+        porConsultor[r.consultor].push(r);
+      });
+
+      Object.entries(porConsultor).forEach(([consultor, registros]) => {
+        if (!registros || registros.length === 0) return;
+
+        // Teto da sessão: inicio do primeiro registro + 8 horas
+        const iniSessao  = new Date(registros[0].inicio).getTime();
+        const tetoSessao = iniSessao + 8 * 60 * 60 * 1000; // +8h em ms
+        const tetoMs     = Math.min(tetoSessao, new Date(`${dataFim}T20:00:00`).getTime());
+
+        registros.forEach((r, idx) => {
+          const iniMs = new Date(r.inicio).getTime();
+          // Fim real: usa r.fim se existir, senão agora — mas nunca passa do teto
+          const fimMs = Math.min(
+            r.fim ? new Date(r.fim).getTime() : Date.now(),
+            tetoMs
+          );
+          if (fimMs <= iniMs) return;
+
+          const dur = Math.round((fimMs - iniMs) / 60000);
+          if (dur > 0) {
+            addEntry(consultor, r.status || 'Bastão', r.detalhes || '', dur);
+          }
+
+          // Gap até o próximo registro = Indisponível
+          const prox = registros[idx + 1];
+          if (prox) {
+            const iniProxMs = Math.min(new Date(prox.inicio).getTime(), tetoMs);
+            const gapMin    = Math.round((iniProxMs - fimMs) / 60000);
+            if (gapMin > 1) {
+              addEntry(consultor, 'Indisponível', '', gapMin);
+            }
+          }
+        });
+      });
+
+      // Processa atividades_presenciais — complementa/substitui o detalhe dos status presenciais
+      // Determina o status pai a partir do texto da atividade
+      const STATUS_PRESENCIAIS = ['Sessão', 'Treinamento', 'Reunião', 'Atend. Presencial'];
+      ativData?.forEach(r => {
+        if (!r.duracao_min || r.duracao_min <= 0) return;
+        const atv = r.atividade || '';
+        // Detecta qual status pai é
+        let statusPai = 'Atend. Presencial';
+        if (/sess[aã]/i.test(atv))      statusPai = 'Sessão';
+        else if (/treina/i.test(atv))   statusPai = 'Treinamento';
+        else if (/reuni[aã]/i.test(atv)) statusPai = 'Reunião';
+
+        if (!mapa[r.consultor]?.[statusPai]) return; // só enriquece se o status já existe via registros_status
+        // Substitui "(sem detalhe)" pelo texto da atividade
+        const itensPai = mapa[r.consultor][statusPai].itens;
+        if (itensPai['(sem detalhe)']) {
+          const semDet = itensPai['(sem detalhe)'];
+          delete itensPai['(sem detalhe)'];
+          itensPai[atv] = (itensPai[atv] || 0) + semDet;
+        } else {
+          itensPai[atv] = (itensPai[atv] || 0) + r.duracao_min;
+        }
+      });
+
+      // Converte para array e ordena
+      const final: Record<string, Record<string, { total: number; itens: { label: string; min: number }[] }>> = {};
+      Object.entries(mapa).forEach(([cons, statuses]) => {
+        final[cons] = {};
+        Object.entries(statuses).forEach(([st, { total, itens }]) => {
+          final[cons][st] = {
+            total,
+            itens: Object.entries(itens)
+              .map(([label, min]) => ({ label, min }))
+              .sort((a, b) => b.min - a.min),
+          };
+        });
+      });
+
+      // Totais globais por status (para KPIs)
+      const tots: Record<string, number> = {};
+      Object.values(final).forEach(statuses => {
+        Object.entries(statuses).forEach(([st, { total }]) => {
+          tots[st] = (tots[st] || 0) + total;
+        });
+      });
+
+      setDados(final);
+      setTotaisStatus(tots);
+    } catch (e) { console.error(e); }
+    setLoading(false);
+  }
+
+  const toggleExpandido = (nome: string) => {
+    setExpandidos(prev => {
+      const next = new Set(prev);
+      next.has(nome) ? next.delete(nome) : next.add(nome);
+      return next;
+    });
+  };
+
+  const consultoresComDados = Object.keys(dados).sort();
+  const totalMinGeral = Object.values(totaisStatus).reduce((s, v) => s + v, 0);
+
+  if (loading) return <Spinner />;
+
+  return (
+    <div className="flex flex-col gap-5">
+
+      {/* ── Filtros ──────────────────────────────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm flex flex-wrap gap-4 items-center">
+        <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
+          {(['dia', 'semana', 'mes'] as const).map(p => {
+            const labels = { dia: '📅 Dia', semana: '📆 Semana', mes: '🗓️ Mês' };
+            return (
+              <button key={p} onClick={() => setPeriodoTipo(p)}
+                className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${
+                  periodoTipo === p ? 'bg-white shadow text-indigo-600' : 'text-gray-500 hover:text-gray-700'
+                }`}>
+                {labels[p]}
+              </button>
+            );
+          })}
+        </div>
+        {periodoTipo === 'dia' && (
+          <input type="date" value={dataCustom} max={hoje()}
+            onChange={e => setDataCustom(e.target.value)}
+            className="border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-400 bg-white" />
+        )}
+        <div className="flex items-center gap-2 text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-100">
+          📅 {labelPeriodo}
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-bold text-gray-400">Consultor</label>
+          <select value={filtConsult} onChange={e => setFiltConsult(e.target.value)}
+            className="border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold bg-white outline-none focus:ring-2 focus:ring-indigo-400">
+            {CONSULTOR_LIST.map(o => <option key={o}>{o}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* ── KPIs por status ──────────────────────────────────────────────── */}
+      {Object.keys(totaisStatus).length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {Object.entries(totaisStatus)
+            .sort((a, b) => b[1] - a[1])
+            .map(([st, min]) => (
+              <div key={st} className="rounded-2xl p-4 text-white shadow-md"
+                style={{ background: `linear-gradient(135deg, ${STATUS_COR[st] || '#64748b'}dd, ${STATUS_COR[st] || '#64748b'})` }}>
+                <p className="text-[10px] font-extrabold uppercase tracking-wider opacity-80 mb-1">{st}</p>
+                <p className="text-2xl font-black leading-none">{fmtMin(min)}</p>
+                <p className="text-xs opacity-70 mt-1">{Math.round((min / totalMinGeral) * 100)}% do total</p>
+              </div>
+            ))}
+        </div>
+      )}
+
+      {/* ── Cards por Consultor ───────────────────────────────────────────── */}
+      {consultoresComDados.length === 0
+        ? <p className="text-center text-gray-400 py-12 text-sm">Nenhum registro encontrado para este período.</p>
+        : (
+          <div className="flex flex-col gap-3">
+            {consultoresComDados.map(consultor => {
+              const statuses = dados[consultor];
+              const totalConsultor = Object.values(statuses).reduce((s, v) => s + v.total, 0);
+              const isExpand = expandidos.has(consultor);
+              const equipe = EQUIPE_EPROC.includes(consultor) ? 'EPROC' : 'JPE';
+
+              // Ordena status por tempo total (maior primeiro)
+              const statusOrdenados = Object.entries(statuses).sort((a, b) => b[1].total - a[1].total);
+
+              return (
+                <div key={consultor} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                  {/* Header do consultor */}
+                  <button
+                    onClick={() => toggleExpandido(consultor)}
+                    className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${equipe === 'EPROC' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
+                        {equipe}
+                      </span>
+                      <span className="font-extrabold text-gray-800">{consultor}</span>
+                      <span className="text-xs text-gray-400 font-bold">{fmtMin(totalConsultor)} total</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {/* Mini barras de status */}
+                      <div className="hidden sm:flex items-center gap-1">
+                        {statusOrdenados.slice(0, 5).map(([st, { total }]) => (
+                          <span key={st} className="text-xs font-bold px-2 py-0.5 rounded-full"
+                            style={{ background: (STATUS_COR[st] || '#94a3b8') + '22', color: STATUS_COR[st] || '#94a3b8' }}>
+                            {st.split(' ')[0]}: {fmtMin(total)}
+                          </span>
+                        ))}
+                      </div>
+                      <span className={`text-gray-400 transition-transform duration-200 ${isExpand ? 'rotate-180' : ''}`}>▼</span>
+                    </div>
+                  </button>
+
+                  {/* Detalhe expandido */}
+                  {isExpand && (
+                    <div className="border-t border-gray-100 px-5 pb-5 pt-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {statusOrdenados.map(([st, { total, itens }]) => (
+                          <div key={st} className="rounded-xl border p-4"
+                            style={{ borderColor: (STATUS_COR[st] || '#94a3b8') + '44', background: (STATUS_COR[st] || '#94a3b8') + '08' }}>
+                            {/* Header do status */}
+                            <div className="flex items-center justify-between mb-3">
+                              <span className="text-sm font-extrabold" style={{ color: STATUS_COR[st] || '#374151' }}>
+                                {st}
+                              </span>
+                              <span className="text-sm font-black px-2 py-0.5 rounded-lg"
+                                style={{ background: (STATUS_COR[st] || '#94a3b8') + '22', color: STATUS_COR[st] || '#374151' }}>
+                                {fmtMin(total)}
+                              </span>
+                            </div>
+                            {/* Itens com complemento */}
+                            <div className="flex flex-col gap-1.5">
+                              {itens.map(({ label, min }) => {
+                                const pct = Math.round((min / total) * 100);
+                                return (
+                                  <div key={label}>
+                                    <div className="flex items-center justify-between mb-0.5">
+                                      <span className="text-xs text-gray-600 font-semibold truncate max-w-[70%]" title={label}>
+                                        {label === '(sem detalhe)' ? <span className="text-gray-300 italic">sem detalhe</span> : label}
+                                      </span>
+                                      <span className="text-xs font-extrabold" style={{ color: STATUS_COR[st] || '#374151' }}>
+                                        {fmtMin(min)}
+                                      </span>
+                                    </div>
+                                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                      <div className="h-1.5 rounded-full transition-all"
+                                        style={{ width: `${pct}%`, background: STATUS_COR[st] || '#94a3b8' }} />
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )
+      }
+
+      {/* ── Tabela consolidada ───────────────────────────────────────────── */}
+      {consultoresComDados.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm overflow-x-auto">
+          <h3 className="text-sm font-extrabold text-gray-700 mb-4">📋 Resumo Consolidado — {labelPeriodo}</h3>
+          <table className="w-full text-xs min-w-[600px]">
+            <thead>
+              <tr className="border-b-2 border-gray-100">
+                <th className="text-left pb-2 pr-4 font-extrabold text-gray-400 uppercase">Consultor</th>
+                {Object.keys(totaisStatus).sort((a,b) => (totaisStatus[b]||0)-(totaisStatus[a]||0)).map(st => (
+                  <th key={st} className="pb-2 px-2 text-center font-extrabold whitespace-nowrap"
+                    style={{ color: STATUS_COR[st] || '#64748b' }}>
+                    {st}
+                  </th>
+                ))}
+                <th className="pb-2 px-2 text-center font-extrabold text-gray-600 uppercase">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {consultoresComDados.map(consultor => {
+                const statuses = dados[consultor];
+                const totalCons = Object.values(statuses).reduce((s, v) => s + v.total, 0);
+                const equipe = EQUIPE_EPROC.includes(consultor) ? 'EPROC' : 'JPE';
+                return (
+                  <tr key={consultor} className="border-b border-gray-50 hover:bg-gray-50">
+                    <td className="py-2 pr-4 whitespace-nowrap">
+                      <span className={`text-[9px] mr-1.5 px-1 py-0.5 rounded font-black ${equipe === 'EPROC' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
+                        {equipe === 'EPROC' ? 'EP' : 'JP'}
+                      </span>
+                      <span className="font-bold text-gray-700">{consultor.split(' ')[0]} {consultor.split(' ').slice(-1)[0]}</span>
+                    </td>
+                    {Object.keys(totaisStatus).sort((a,b) => (totaisStatus[b]||0)-(totaisStatus[a]||0)).map(st => (
+                      <td key={st} className="py-2 px-2 text-center">
+                        {statuses[st]
+                          ? <span className="font-bold text-xs px-1.5 py-0.5 rounded"
+                              style={{ background: (STATUS_COR[st]||'#94a3b8')+'18', color: STATUS_COR[st]||'#374151' }}>
+                              {fmtMin(statuses[st].total)}
+                            </span>
+                          : <span className="text-gray-200">—</span>}
+                      </td>
+                    ))}
+                    <td className="py-2 px-2 text-center font-black text-gray-700">{fmtMin(totalCons)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-gray-200 bg-gray-50">
+                <td className="py-2 pr-4 text-xs font-extrabold text-gray-500 uppercase">Total</td>
+                {Object.keys(totaisStatus).sort((a,b) => (totaisStatus[b]||0)-(totaisStatus[a]||0)).map(st => (
+                  <td key={st} className="py-2 px-2 text-center font-black"
+                    style={{ color: STATUS_COR[st] || '#374151' }}>
+                    {fmtMin(totaisStatus[st] || 0)}
+                  </td>
+                ))}
+                <td className="py-2 px-2 text-center font-black text-gray-900">{fmtMin(totalMinGeral)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+
+export function PainelGerencial({ inline = false, perfil = 'Gestor' }: { inline?: boolean; perfil?: string }) {
   const isConsultor = perfil === 'Consultor';
   const abas = isConsultor
     ? ['Geral', 'Semanal', 'Certidões']
-    : ['Auditoria', 'Geral', 'Diário', 'Semanal', 'Certidões', 'Horas Extras'];
-  const icons: Record<string, string> = { 'Auditoria': '🔍', 'Geral': '📊', 'Diário': '📅', 'Semanal': '📆', 'Certidões': '📋', 'Horas Extras': '⏰' };
+    : ['Auditoria', 'Geral', 'Diário', 'Semanal', 'Certidões', 'Horas Extras', 'Status'];
+  const icons: Record<string, string> = { 'Auditoria': '🔍', 'Geral': '📊', 'Diário': '📅', 'Semanal': '📆', 'Certidões': '📋', 'Horas Extras': '⏰', 'Status': '⏱️' };
   const [aba, setAba] = useState(isConsultor ? 'Geral' : 'Auditoria');
 
   return (
@@ -1451,6 +2013,7 @@ export function PainelGerencial({ inline = false, perfil = 'Gestor' }: { inline?
         {aba === 'Semanal'   && <AbaSemanal />}
         {aba === 'Certidões'    && <AbaCertidoes perfil={perfil} />}
         {aba === 'Horas Extras' && <AbaHorasExtras />}
+        {aba === 'Status'       && <AbaStatusDetalhado />}
       </div>
     </div>
   );

@@ -22,7 +22,7 @@ const GRAVIDADE_CORES: Record<string, string> = {
   'Crítica':  'bg-purple-100 text-purple-900 border-purple-400',
 }
 
-const SISTEMAS = ['Eproc', 'JPE', 'PJe', 'SEI', 'Conveniados', 'Outro']
+const SISTEMAS = ['Eproc', 'JPE', 'PJe', 'SEI', 'Themis', 'Conveniados', 'Outro']
 const GRAVIDADES = ['Baixa', 'Média', 'Alta', 'Crítica']
 
 const GRAVIDADE_ICONE: Record<string, string> = {
