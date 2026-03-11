@@ -392,22 +392,47 @@ const TIPO_ATIV_CFG:Record<string,{icon:string;badge:string}>={
 const getCfgAtv=(t:string)=>TIPO_ATIV_CFG[t]??{icon:'📌',badge:'bg-gray-100 text-gray-600'}
 
 
+// Mapa: nome no sistema (TODOS_CONSULTORES) → nome salvo no banco (agenda_detalhes)
+const NOME_MAP: Record<string,string> = {
+  'Alex Paulo':           'Alex Silva',
+  'Barbara Mara':         'Barbara Araujo',
+  'Bruno Glaicon':        'Bruno Martins',
+  'Douglas Souza':        'Douglas Gonçalves',
+  'Douglas Paiva':        'Douglas Silva',
+  'Fábio Alves':          'Fábio Sousa',
+  'Farley Juliano':       'Farley Juliano',
+  'Glayce Torres':        'Glayce Silva',
+  'Gleis Rodrigues':      'Gleis Rodrigues',
+  'Igor Dayrell':         'Igor Correa',
+  'Isabela Dias':         'Isabela Homssi',
+  'Jerry Marcos':         'Jerry Neto',
+  'Leandro':              'Leandro Catharino',
+  'Leonardo Damaceno':    'Leonardo Lacerda',
+  'Luiz Henrique':        'Luiz Oliveira',
+  'Marcelo Dutra':        'Marcelo Dutra',
+  'Marcelo Guerra':       'Marcelo Guerra',
+  'Marina Amaral':        'Marina Amaral',
+  'Marina Marques':       'Marina Marques',
+  'Michael Douglas':      'Michael Aguiar',
+  'Morôni':               'Morôni Fagundes',
+  'Pablo Mol':            'Pablo Mol',
+  'Sarah Leal':           'Sarah Araujo',
+  'Vanessa Ligiane':      'Vanessa Santos',
+}
+
 // Verifica se consultor da sessão bate com o filtro
-// Usa primeiro+último nome para evitar ambiguidade (Marina Amaral ≠ Marina Marques)
 function matchConsultor(nomesSessao:string[], filtro:string):boolean {
   if(filtro==='Todos') return true
-  const primUlt=(n:string)=>{const p=n.trim().split(' ').filter(Boolean);return p.length<=1?p[0].toLowerCase():`${p[0]} ${p[p.length-1]}`.toLowerCase()}
-  const filtroNorm=primUlt(filtro)
+  const norm=(n:string)=>n.trim().toLowerCase()
+  // Nome mapeado do sistema para o banco
+  const nomeBanco=NOME_MAP[filtro]
   return nomesSessao.some(n=>{
-    if(n.toLowerCase()===filtro.toLowerCase()) return true       // exato
-    if(primUlt(n)===filtroNorm) return true                      // primeiro+último
-    // só usa match por primeiro nome se não há ambiguidade (nome único no sistema)
-    const primeiroFiltro=filtro.split(' ')[0].toLowerCase()
-    const primeiroDaLista=n.split(' ')[0].toLowerCase()
-    if(primeiroFiltro===primeiroDaLista){
-      // se filtro tem mais de um token, já usou o match acima — sem ambiguidade extra
-      return filtro.split(' ').length===1 && primeiroDaLista===primeiroFiltro
-    }
+    if(norm(n)===norm(filtro)) return true          // match exato (sistema)
+    if(nomeBanco && norm(n)===norm(nomeBanco)) return true  // match via mapa
+    // primeiro+último como fallback
+    const primUlt=(s:string)=>{const p=s.trim().split(' ').filter(Boolean);return p.length<=1?p[0]:`${p[0]} ${p[p.length-1]}`}
+    if(norm(primUlt(n))===norm(primUlt(filtro))) return true
+    if(nomeBanco && norm(primUlt(n))===norm(primUlt(nomeBanco))) return true
     return false
   })
 }
@@ -460,13 +485,14 @@ function SeletorConsultores({selecionados,onChange,bloqueados,label='Consultores
 // ═══════════════════════════════════════════════════════════════════════════════
 // ABA SESSÕES (com edição completa)
 // ═══════════════════════════════════════════════════════════════════════════════
-function AbaSessoes({canEdit,ferias}:{canEdit:boolean;ferias:Ferias[]}){
+function AbaSessoes({canEdit,ferias,filtroInicial='Todos'}:{canEdit:boolean;ferias:Ferias[];filtroInicial?:string}){
   const {meuLogin}=useBastaoStore()
   const[offset,setOffset]=useState(0)
   const[sessoes,setSessoes]=useState<AgendaDetalhe[]>([])
   const[loading,setLoading]=useState(false)
   const[copiando,setCopiando]=useState(false)
-  const[filtro,setFiltro]=useState(()=>meuLogin||'Todos')
+  const[filtro,setFiltro]=useState(filtroInicial)
+  useEffect(()=>{ setFiltro(filtroInicial) },[filtroInicial])
   const[modal,setModal]=useState<{data:string;item?:AgendaDetalhe}|null>(null)
   const[popover,setPopover]=useState<AgendaDetalhe|null>(null)
   const[obsModal,setObsModal]=useState<{sessao:AgendaDetalhe}|null>(null)
@@ -851,13 +877,14 @@ function AbaSessoes({canEdit,ferias}:{canEdit:boolean;ferias:Ferias[]}){
 // ═══════════════════════════════════════════════════════════════════════════════
 // ABA ATIVIDADES (com edição completa)
 // ═══════════════════════════════════════════════════════════════════════════════
-function AbaAtividades({canEdit,ferias}:{canEdit:boolean;ferias:Ferias[]}){
+function AbaAtividades({canEdit,ferias,filtroInicial='Todos'}:{canEdit:boolean;ferias:Ferias[];filtroInicial?:string}){
   const{meuLogin}=useBastaoStore()
   const[offset,setOffset]=useState(0)
   const[itens,setItens]=useState<AgendaAtividade[]>([])
   const[loading,setLoading]=useState(false)
   const[copiando,setCopiando]=useState(false)
-  const[filtro,setFiltro]=useState('Todos')
+  const[filtro,setFiltro]=useState(filtroInicial)
+  useEffect(()=>{ setFiltro(filtroInicial) },[filtroInicial])
   const[modal,setModal]=useState<{data:string;item?:AgendaAtividade}|null>(null)
   const[tipoFiltro,setTipoFiltro]=useState('')
   const[tipoSel,setTipoSel]=useState('')
@@ -1145,7 +1172,7 @@ function AbaAtividades({canEdit,ferias}:{canEdit:boolean;ferias:Ferias[]}){
 // ═══════════════════════════════════════════════════════════════════════════════
 // ABA PLANTÕES
 // ═══════════════════════════════════════════════════════════════════════════════
-function AbaPlantoes({canEdit,meuLogin}:{canEdit:boolean;meuLogin:string}){
+function AbaPlantoes({canEdit,meuLogin,filtroMinha=false}:{canEdit:boolean;meuLogin:string;filtroMinha?:boolean}){
   const[plantoes,setPlantoes]=useState<Plantao[]>([])
   const[loading,setLoading]=useState(true)
   const[modal,setModal]=useState<Plantao|null>(null)
@@ -1239,7 +1266,7 @@ function AbaPlantoes({canEdit,meuLogin}:{canEdit:boolean;meuLogin:string}){
       {loading?<div className="flex justify-center py-8"><div className="w-7 h-7 border-4 border-red-400 border-t-transparent rounded-full animate-spin"/></div>
       :<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {plantoes.length===0&&<p className="text-sm text-gray-400 italic">Nenhum plantão cadastrado.</p>}
-        {plantoes.map(p=>{
+        {(filtroMinha?plantoes.filter(p=>matchConsultor(p.plantonistas.split(',').map(n=>n.trim()),meuLogin)):plantoes).map(p=>{
           const dt=new Date(p.date+'T12:00:00'); const isHoje=p.date===fmtLocal(new Date())
           const isFeriado=p.tipo_dia.toLowerCase().includes('feriado')||p.tipo_dia.toLowerCase().includes('carnaval')||p.tipo_dia.toLowerCase().includes('recesso')
           return(
@@ -1544,7 +1571,7 @@ function AbaSalaTreinamento({canEdit,meuLogin}:{canEdit:boolean;meuLogin:string}
 // ═══════════════════════════════════════════════════════════════════════════════
 // ABA TREINAMENTOS EXTERNOS
 // ═══════════════════════════════════════════════════════════════════════════════
-function AbaTreinamentosExternos({canEdit,meuLogin,ferias}:{canEdit:boolean;meuLogin:string;ferias:Ferias[]}){
+function AbaTreinamentosExternos({canEdit,meuLogin,ferias,filtroMinha=false}:{canEdit:boolean;meuLogin:string;ferias:Ferias[];filtroMinha?:boolean}){
   const[itens,setItens]=useState<TreinamentoExterno[]>([])
   const[loading,setLoading]=useState(true)
   const[modal,setModal]=useState<TreinamentoExterno|'new'|null>(null)
@@ -1580,7 +1607,7 @@ function AbaTreinamentosExternos({canEdit,meuLogin,ferias}:{canEdit:boolean;meuL
     await supabase.from('treinamentos_externos').delete().eq('id',id); await load()
   }
 
-  const itensFiltrados=itens.filter(i=>filtroTipo==='Todos'||i.tipo===filtroTipo)
+  const itensFiltrados=itens.filter(i=>(filtroTipo==='Todos'||i.tipo===filtroTipo)&&(!filtroMinha||matchConsultor(i.consultores||[],meuLogin)))
   const inp="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-green-400 bg-white"
 
   return(
@@ -1720,6 +1747,7 @@ export function PainelEquipeCompleto(){
   const[aberto,setAberto]=useState(false)
   const[aba,setAba]=useState('sessoes')
   const[ferias,setFerias]=useState<Ferias[]>([])
+  const[minhaView,setMinhaView]=useState(false)
 
   const canEdit=meuLogin==='Brenda'||meuLogin==='Farley'
 
@@ -1746,7 +1774,13 @@ export function PainelEquipeCompleto(){
             <h2 className="text-xl font-black text-white">📅 Painel da Equipe</h2>
             <p className="text-xs text-white/60">Sessões · Atividades · Plantões · Férias · Sala · Treinamentos</p>
           </div>
-          <button onClick={()=>setAberto(false)} className="text-white/60 hover:text-white text-2xl px-2">✕</button>
+          <div className="flex items-center gap-3">
+            <button onClick={()=>setMinhaView(v=>!v)}
+              className={`text-xs font-black px-4 py-2 rounded-xl border-2 transition-all ${minhaView?'bg-white text-violet-700 border-white':'bg-white/10 text-white border-white/30 hover:bg-white/20'}`}>
+              {minhaView?'👁️ Todos':'👤 Minhas'}
+            </button>
+            <button onClick={()=>setAberto(false)} className="text-white/60 hover:text-white text-2xl px-2">✕</button>
+          </div>
         </div>
         <div className="border-b border-gray-200 px-4 flex gap-1 flex-shrink-0 overflow-x-auto bg-gray-50">
           {ABAS.map(a=>(
@@ -1757,12 +1791,12 @@ export function PainelEquipeCompleto(){
           ))}
         </div>
         <div className="flex-1 overflow-y-auto p-6">
-          {aba==='sessoes'     &&<AbaSessoes canEdit={canEdit} ferias={ferias}/>}
-          {aba==='atividades'  &&<AbaAtividades canEdit={canEdit} ferias={ferias}/>}
-          {aba==='plantoes'    &&<AbaPlantoes canEdit={canEdit} meuLogin={meuLogin||''}/>}
+          {aba==='sessoes'     &&<AbaSessoes canEdit={canEdit} ferias={ferias} filtroInicial={minhaView?meuLogin||'Todos':'Todos'}/>}
+          {aba==='atividades'  &&<AbaAtividades canEdit={canEdit} ferias={ferias} filtroInicial={minhaView?meuLogin||'Todos':'Todos'}/>}
+          {aba==='plantoes'    &&<AbaPlantoes canEdit={canEdit} meuLogin={meuLogin||''} filtroMinha={minhaView}/>}
           {aba==='ferias'      &&<AbaFerias canEdit={canEdit} meuLogin={meuLogin||''} onFeriasUpdate={setFerias}/>}
           {aba==='sala'        &&<AbaSalaTreinamento canEdit={canEdit} meuLogin={meuLogin||''}/>}
-          {aba==='treinamentos'&&<AbaTreinamentosExternos canEdit={canEdit} meuLogin={meuLogin||''} ferias={ferias}/>}
+          {aba==='treinamentos'&&<AbaTreinamentosExternos canEdit={canEdit} meuLogin={meuLogin||''} ferias={ferias} filtroMinha={minhaView}/>}
         </div>
       </div>
     </div>
