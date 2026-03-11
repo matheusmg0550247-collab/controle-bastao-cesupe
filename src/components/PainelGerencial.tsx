@@ -1447,21 +1447,28 @@ function AbaAuditoriaTempoReal() {
   const [loading, setLoading] = useState(true)
   const [tick, setTick] = useState(Date.now())
   const [expandido, setExpandido] = useState<string|null>(null)
-  const consultores = USUARIOS_SISTEMA.filter(u=>u.perfil==='Consultor').map(u=>u.nome)
+  const [dataFiltro, setDataFiltro] = useState(hoje())
+  const [modoComparacao, setModoComparacao] = useState(false)
+  const consultores = USUARIOS_SISTEMA.filter(u=>u.perfil==='Consultor' && u.nome!=='Claudia Luiza' && !u.nome.toLowerCase().includes('cláudia') && !u.nome.toLowerCase().includes('claudia')).map(u=>u.nome)
   const { filaEproc, filaJpe } = useBastaoStore()
   const naFila = new Set([...filaEproc, ...filaJpe])
+  const isHoje = dataFiltro === hoje()
 
   useEffect(()=>{ const t=setInterval(()=>setTick(Date.now()),30000); return()=>clearInterval(t) },[])
-  useEffect(()=>{ load(); const t=setInterval(load,120000); return()=>clearInterval(t) },[])
+  useEffect(()=>{ load() },[dataFiltro])
+  // Auto-reload only for today
+  useEffect(()=>{
+    if(!isHoje) return
+    const t=setInterval(load,120000); return()=>clearInterval(t)
+  },[isHoje])
 
   async function load() {
     setLoading(true)
     const [regRes, rotRes] = await Promise.all([
-      supabase.from('registros_status').select('consultor,status,inicio,fim,duracao_min').eq('data',hoje()).order('inicio',{ascending:true}),
-      supabase.from('bastao_rotacoes').select('para_consultor,data_hora').gte('data_hora',hoje()+'T00:00:00').order('data_hora',{ascending:false}).limit(200),
+      supabase.from('registros_status').select('consultor,status,inicio,fim,duracao_min').eq('data',dataFiltro).order('inicio',{ascending:true}),
+      supabase.from('bastao_rotacoes').select('para_consultor,data_hora').gte('data_hora',dataFiltro+'T00:00:00').lte('data_hora',dataFiltro+'T23:59:59').order('data_hora',{ascending:false}).limit(200),
     ])
     setRegistros(regRes.data||[])
-    // Pega última vez que cada consultor recebeu o bastão
     const rot:Record<string,string>={}
     for(const r of (rotRes.data||[])){
       if(!rot[r.para_consultor]) rot[r.para_consultor]=r.data_hora
@@ -1469,6 +1476,13 @@ function AbaAuditoriaTempoReal() {
     setUltimaRotacao(rot)
     setLoading(false)
   }
+
+  // Período rápido
+  const periodos = [
+    {label:'Hoje', fn:()=>setDataFiltro(hoje())},
+    {label:'Ontem', fn:()=>{const d=new Date();d.setDate(d.getDate()-1);setDataFiltro(d.toISOString().split('T')[0])}},
+    {label:'Seg', fn:()=>{const d=new Date();const day=d.getDay();d.setDate(d.getDate()-(day===0?6:day-1));setDataFiltro(d.toISOString().split('T')[0])}},
+  ]
 
   const porConsultor = consultores.map(nome=>{
     const regs=registros.filter(r=>r.consultor===nome)
@@ -1503,25 +1517,32 @@ function AbaAuditoriaTempoReal() {
     if(regs.length===0&&!naFila.has(nome)){
       alertas.push({msg:'Sem nenhum registro hoje',nivel:'vermelho'})
     }
-    // 2. Indisponível após ter trabalhado
-    const jaTrabalhou=regs.some(r=>!r.status||r.status==='Bastão')
-    const statusIndisp=aberto&&(!aberto.status||aberto.status==='Indisponível'||aberto.status==='Indisponivel')
-    if(statusIndisp&&duracaoStatusAtual>30&&jaTrabalhou){
-      alertas.push({msg:`Indisponível há ${fmtRT(duracaoStatusAtual)}`,nivel:'vermelho'})
+    // 2. Indisponível — qualquer ocorrência no dia gera alerta
+    const statusIndisp=aberto&&(aberto.status==='Indisponível'||aberto.status==='Indisponivel')
+    // Atual: está Indisponível agora
+    if(statusIndisp){
+      alertas.push({msg:`🚨 Indisponível agora há ${fmtRT(duracaoStatusAtual)}`,nivel:'vermelho'})
     }
-    // 3. Almoço fora do padrão
+    // Histórico: todos os Indisponível fechados do dia
+    for(const r of regs){
+      if((r.status==='Indisponível'||r.status==='Indisponivel')&&r.fim){
+        const dur=durAtual(r.inicio,r.fim,r.duracao_min)
+        const ini=new Date(r.inicio).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
+        alertas.push({msg:`⚠️ Indisponível às ${ini} por ${fmtRT(dur)}`,nivel:'amarelo'})
+      }
+    }
+    // 3. Almoço > 2 horas
     for(const r of regs){
       if((r.status||'').toLowerCase().includes('almoç')){
         const dur=durAtual(r.inicio,r.fim,r.duracao_min)
-        if(r.fim&&dur<30) alertas.push({msg:`Almoço curto: ${fmtRT(dur)}`,nivel:'vermelho'})
-        if(dur>60) alertas.push({msg:`Almoço longo: ${fmtRT(dur)}`,nivel:'vermelho'})
+        if(dur>120) alertas.push({msg:`Almoço longo: ${fmtRT(dur)} (>2h)`,nivel:'vermelho'})
       }
     }
-    // 4. Status longo > 3h
+    // 4. Qualquer status > 4 horas
     for(const r of regs){
-      if(['Sessão','Projeto','Atividades','Treinamento','Reunião','Atend. Presencial'].includes(r.status)){
+      if(r.status&&r.status!=='Bastão'){
         const dur=durAtual(r.inicio,r.fim,r.duracao_min)
-        if(dur>180) alertas.push({msg:`${r.status} há ${fmtRT(dur)} (>3h)`,nivel:'vermelho'})
+        if(dur>240) alertas.push({msg:`${r.status} há ${fmtRT(dur)} (>4h)`,nivel:'vermelho'})
       }
     }
 
@@ -1622,6 +1643,28 @@ function AbaAuditoriaTempoReal() {
 
   return(
     <div className="flex flex-col gap-5">
+      {/* Seletor de período */}
+      <div className="flex items-center gap-2 flex-wrap bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3">
+        <span className="text-xs font-black text-gray-500 uppercase tracking-wide">📅 Período:</span>
+        <button onClick={()=>setDataFiltro(hoje())}
+          className={`text-xs font-bold px-3 py-1.5 rounded-xl border-2 transition-all ${dataFiltro===hoje()?'border-indigo-500 bg-indigo-50 text-indigo-700':'border-gray-200 text-gray-500 hover:border-indigo-300'}`}>
+          Hoje
+        </button>
+        <button onClick={()=>{const d=new Date();d.setDate(d.getDate()-1);setDataFiltro(d.toISOString().split('T')[0])}}
+          className={`text-xs font-bold px-3 py-1.5 rounded-xl border-2 transition-all ${!isHoje&&dataFiltro===new Date(new Date().setDate(new Date().getDate()-1)).toISOString().split('T')[0]?'border-indigo-500 bg-indigo-50 text-indigo-700':'border-gray-200 text-gray-500 hover:border-indigo-300'}`}>
+          Ontem
+        </button>
+        <button onClick={()=>{const d=new Date();const day=d.getDay();d.setDate(d.getDate()-(day===0?6:day-1));setDataFiltro(d.toISOString().split('T')[0])}}
+          className="text-xs font-bold px-3 py-1.5 rounded-xl border-2 border-gray-200 text-gray-500 hover:border-indigo-300 transition-all">
+          Seg
+        </button>
+        <input type="date" value={dataFiltro} onChange={e=>setDataFiltro(e.target.value)}
+          className="border-2 border-gray-200 rounded-xl px-3 py-1 text-xs font-bold outline-none focus:border-indigo-400 bg-white"/>
+        {!isHoje&&<span className="text-[10px] text-amber-600 font-bold bg-amber-50 border border-amber-200 px-2 py-1 rounded-lg">📋 Histórico — sem atualização automática</span>}
+        {isHoje&&<span className="text-[10px] text-green-600 font-bold bg-green-50 border border-green-200 px-2 py-1 rounded-lg">🔴 Ao vivo — atualiza a cada 2 min</span>}
+        <button onClick={load} className="ml-auto text-xs font-bold text-indigo-500 hover:text-indigo-700 border border-indigo-200 bg-indigo-50 px-3 py-1.5 rounded-xl">↻ Recarregar</button>
+      </div>
+
       <div className="grid grid-cols-3 gap-4">
         <div className={`rounded-2xl p-4 text-center border-2 ${comAlerta.length>0?'border-red-400 bg-red-50':'border-green-300 bg-green-50'}`}>
           <p className="text-[10px] font-black text-gray-500 uppercase mb-1">🚨 Com Alerta</p>
@@ -1634,9 +1677,9 @@ function AbaAuditoriaTempoReal() {
           <p className="text-[10px] text-gray-400">consultores</p>
         </div>
         <div className="rounded-2xl p-4 text-center border-2 border-gray-200 bg-gray-50">
-          <p className="text-[10px] font-black text-gray-500 uppercase mb-1">⏱ Atualizado</p>
-          <p className="text-sm font-black text-gray-600">{new Date(tick).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</p>
-          <p className="text-[10px] text-gray-400">a cada 2 min</p>
+          <p className="text-[10px] font-black text-gray-500 uppercase mb-1">⏱ {isHoje?'Atualizado':'Data'}</p>
+          <p className="text-sm font-black text-gray-600">{isHoje?new Date(tick).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):new Date(dataFiltro+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})}</p>
+          <p className="text-[10px] text-gray-400">{isHoje?'a cada 2 min':new Date(dataFiltro+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'long'})}</p>
         </div>
       </div>
       {comAlerta.length>0&&(
