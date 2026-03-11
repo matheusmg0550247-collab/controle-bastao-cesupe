@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useBastaoStore } from '../store/useBastaoStore'
+import { RAMAIS } from '../constants'
 import { supabase } from '../lib/supabase'
 import { Document, Packer, Paragraph, TextRun, AlignmentType } from 'docx'
 import { saveAs } from 'file-saver'
@@ -34,74 +35,9 @@ export function PainelFerramentas() {
   // REMOVIDO: atdJira
 
   const usuarioOptions = ["Cartório", "Gabinete", "Público Externo", "Interno", "Outros"]
-  const sistemaOptions = ["Eproc", "JPE", "PJe", "SEI", "Themis", "Conveniados", "Outros"]
+  const sistemaOptions = ["Eproc", "JPE", "PJe", "SEI", "Conveniados", "Outros"]
   const canalOptions   = ["Whatsapp", "Telefone", "Presencial", "E-mail", "Outros"]
   const desfechoOptions = ["Resolvido - Cesupe", "Encaminhado N2", "Encaminhado N3", "Aguardando Usuário", "Outros"]
-
-  const setorOptions = [
-    "1ª Vara da Fazenda Pública","2ª Vara da Fazenda Pública","3ª Vara da Fazenda Pública",
-    "4ª Vara da Fazenda Pública","5ª Vara da Fazenda Pública",
-    "7ª Vara Cível","11ª Vara Cível","14ª Vara Cível","18ª Vara Cível","20ª Vara Cível",
-    "24ª Vara Cível","28ª Vara Cível","29ª Vara Cível","31ª Vara Cível","32ª Vara Cível","35ª Vara Cível",
-    "1ª Vara Empresarial","2ª Vara Empresarial",
-    "1ª Vara de Família","3ª Vara de Família","5ª Vara de Família","7ª Vara de Família","11ª Vara de Família","12ª Vara de Família",
-    "1ª Vara de Sucessões","2ª Vara de Sucessões",
-    "2ª Vara Criminal","3ª Vara Criminal","7ª Vara Criminal","8ª Vara Criminal","9ª Vara Criminal","11ª Vara Criminal",
-    "Vara de Execuções Criminais",
-    "1º Juizado de Violência Doméstica","4º Juizado de Violência Doméstica",
-    "Vara Infracional da Infância e Juventude","1ª Vara Cível da Infância e Juventude","2ª Vara Cível da Infância e Juventude",
-    "1ª Vara do Tribunal do Júri","2ª Vara do Tribunal do Júri",
-    "CENTRASE - Cível","CENTRASE – Fazenda Pública",
-    "2ª Vara Cível - Betim","5ª Vara Cível - Betim","3ª Vara Criminal - Betim",
-    "2ª Vara Cível - Contagem","4ª Vara Cível - Contagem","6ª Vara Cível - Contagem",
-    "3ª Vara Criminal - Contagem","4ª Vara Criminal - Contagem",
-    "Gab. Des. Alberto Diniz Júnior","Gab. Des. Alberto Vilas Boas","Gab. Des. Alexandre Victor de Carvalho",
-    "Gab. Des. Amorim Siqueira","Gab. Des. Anacleto Rodrigues","Gab. Des. Arnaldo Maciel",
-    "Gab. Des. Baeta Neves","Gab. Des. Cavalcante Motta","Gab. Des. Carlos Levenhagen",
-    "Gab. Des. Carlos Roberto de Faria","Gab. Des. Claret de Moraes","Gab. Des. Corrêa Camargo",
-    "Gab. Des. Delvan Barcelos Júnior","Gab. Des. Dirceu Walace Baroni","Gab. Des. Doorgal Borges de Andrada",
-    "Gab. Des. Eduardo Brum","Gab. Des. Eduardo Machado","Gab. Des. Edilson Olímpio Fernandes",
-    "Gab. Des. Edir Guerson de Medeiros","Gab. Des. Evandro Lopes da Costa Teixeira",
-    "Gab. Des. Fábio Torres de Sousa","Gab. Des. Fernando Caldeira Brant","Gab. Des. Fernando Lins",
-    "Gab. Des. Francisco Costa","Gab. Des. Franklin Higino Caldeira Filho","Gab. Des. Fortuna Grion",
-    "Gab. Des. Gilson Soares Leme","Gab. Des. Glauco Fernandes","Gab. Des. Guilherme de Azeredo Passos",
-    "Gab. Des. Habib Felippe Jabour","Gab. Des. Henrique Abi-Ackel Torres","Gab. Des. Igor Dayrell",
-    "Gab. Des. Jair Varão","Gab. Des. Jaubert Carneiro Jaques","Gab. Des. João Cancio",
-    "Gab. Des. Joemilson Donizetti Lopes","Gab. Des. José Américo Martins da Costa",
-    "Gab. Des. José Arthur Filho","Gab. Des. José de Carvalho Barbosa","Gab. Des. José Eustáquio Lucas Pereira",
-    "Gab. Des. José Luiz de Moura Faleiros","Gab. Des. Júlio César Lorens",
-    "Gab. Des. Júlio Cezar Guttierrez","Gab. Des. Leite Praça","Gab. Des. Leonardo de Faria Beraldo",
-    "Gab. Des. Leopoldo Mameluque","Gab. Des. Luiz Artur Hilário","Gab. Des. Luiz Carlos Gomes da Mata",
-    "Gab. Des. Luiz Gonzaga Silveira Soares","Gab. Des. Luís Carlos Gambogi","Gab. Des. Luís Eduardo Alves Pifano",
-    "Gab. Des. Lúcio de Brito","Gab. Des. Magid Nauef Láuar","Gab. Des. Manoel dos Reis Morais",
-    "Gab. Des. Marco Antônio de Melo","Gab. Des. Marco Aurelio Ferenzini","Gab. Des. Marcelo de Oliveira Milagres",
-    "Gab. Des. Marcelo Pereira da Silva","Gab. Des. Marcelo Rodrigues","Gab. Des. Márcio Idalmo Santos Miranda",
-    "Gab. Des. Marcos Flávio Lucas Padula","Gab. Des. Marcos Henrique Caldeira Brant",
-    "Gab. Des. Matheus Chaves Jardim","Gab. Des. Maurício Pinto Ferreira","Gab. Des. Maurício Soares",
-    "Gab. Des. Monteiro de Castro","Gab. Des. Nelson Missias de Morais","Gab. Des. Newton Teixeira Carvalho",
-    "Gab. Des. Nicolau Lupianhes Neto","Gab. Des. Octavio Augusto De Nigris Boccalini",
-    "Gab. Des. Octávio de Almeida Neves","Gab. Des. Oliveira Firmo","Gab. Des. Pablo Mol",
-    "Gab. Des. Paulo Calmon Nogueira da Gama","Gab. Des. Pedro Aleixo","Gab. Des. Pedro Bernardes de Oliveira",
-    "Gab. Des. Pedro Bitencourt Marcondes","Gab. Des. Peixoto Henriques","Gab. Des. Raimundo Messias Júnior",
-    "Gab. Des. Ramom Tácio","Gab. Des. Renato Dresch","Gab. Des. Rinaldo Kennedy Silva",
-    "Gab. Des. Roberto Apolinário de Castro","Gab. Des. Roberto Ribeiro de Paiva Júnior",
-    "Gab. Des. Roberto Vasconcellos","Gab. Des. Rui de Almeida Magalhães","Gab. Des. Sálvio Chaves",
-    "Gab. Des. Sérgio André da Fonseca Xavier","Gab. Des. Tiago Gomes de Carvalho Pinto",
-    "Gab. Des. Wagner Wilson","Gab. Des. Walner Barbosa Milward de Azevedo","Gab. Des. Wilson Benevides",
-    "Gab. Des. Élito Almeida","Gab. Desa. Âmalin Aziz Sant'Ana","Gab. Desa. Ângela de Lourdes Rodrigues",
-    "Gab. Desa. Ana Paula Caixeta","Gab. Desa. Alice Birchal","Gab. Desa. Aparecida Grossi",
-    "Gab. Desa. Áurea Brasil","Gab. Desa. Beatriz Pinheiro Caires","Gab. Desa. Cláudia Maia",
-    "Gab. Desa. Daniela Villani Bonaccorsi","Gab. Desa. Eveline Félix","Gab. Desa. Fabiana da Cunha Pasqua",
-    "Gab. Desa. Ivone Guilarducci","Gab. Desa. Jaqueline Calábria Albuquerque",
-    "Gab. Desa. Juliana Campos Horta","Gab. Desa. Kárin Emmerich","Gab. Desa. Lílian Maciel",
-    "Gab. Desa. Luzia Divina de Paula Peixôto","Gab. Desa. Luziene Medeiros Barbosa Lima",
-    "Gab. Desa. Maria Cristina Cunha Carvalhais","Gab. Desa. Maria das Graças Rocha Santos",
-    "Gab. Desa. Maria Inês Souza","Gab. Desa. Maria Lúcia Cabral Caruso","Gab. Desa. Maria Luiza Santana Assunção",
-    "Gab. Desa. Mônica Aragão Martiniano","Gab. Desa. Mônica Libânio","Gab. Desa. Paula Cunha e Silva",
-    "Gab. Desa. Régia Ferreira de Lima","Gab. Desa. Sandra Fonseca","Gab. Desa. Shirley Fenzi Bertão",
-    "Gab. Desa. Valeria Rodrigues","Gab. Desa. Yeda Athias",
-    "Outros",
-  ].sort()
 
   const [heData, setHeData] = useState(hoje)
   const [heInicio, setHeInicio] = useState('')
@@ -117,6 +53,8 @@ export function PainelFerramentas() {
   const [certPeticao, setCertPeticao] = useState('Inicial')
 
   const [lancheItem, setLancheItem] = useState('')
+  const [lancheSenha, setLancheSenha] = useState('')
+  const [showRamais, setShowRamais] = useState(false)
   const [lancheEstabelecimento, setLancheEstabelecimento] = useState('')
 
   // ── Bastões pendentes ──────────────────────────────────────────────────
@@ -359,7 +297,32 @@ export function PainelFerramentas() {
         <button onClick={() => setModalAberto('sugestao')} className={btnClass}>💡 Sugestão</button>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
-        <button onClick={() => setModalAberto('lanche')} className={btnClass}>🍔 Lanche</button>
+        <button onClick={() => setModalAberto('lanche')} className={btnClass}>🥪 Solicitar Lanche</button>
+        <div className="relative">
+          <button onClick={() => setShowRamais(v => !v)} className={btnClass + " w-full"}>☎️ Ramais</button>
+          {showRamais && (
+            <div className="absolute bottom-full left-0 mb-2 w-72 bg-white rounded-2xl shadow-2xl border border-gray-200 z-50 overflow-hidden">
+              <div className="bg-gradient-to-r from-indigo-600 to-violet-700 px-4 py-3 flex justify-between items-center">
+                <span className="text-white font-black text-sm">☎️ Ramais CESUPE</span>
+                <button onClick={() => setShowRamais(false)} className="text-white/70 hover:text-white text-lg">✕</button>
+              </div>
+              <div className="p-3 max-h-72 overflow-y-auto">
+                <div className="grid grid-cols-2 gap-1">
+                  {Object.entries(RAMAIS)
+                    .filter(([k]) => !k.includes(' ') || k === 'Douglas Paiva' || k === 'Marcelo Pena' || k === 'Marina Amaral' || k === 'Marina Marques')
+                    .sort(([a],[b]) => a.localeCompare(b))
+                    .map(([nome, ramal]) => (
+                      <div key={nome} className="flex items-center justify-between bg-gray-50 rounded-xl px-2.5 py-1.5">
+                        <span className="text-xs font-bold text-gray-700 truncate">{nome}</span>
+                        <span className="text-xs font-black text-indigo-600 ml-1 flex-shrink-0">{ramal}</span>
+                      </div>
+                    ))
+                  }
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {modalAberto === 'sugestao' && (
@@ -449,11 +412,8 @@ export function PainelFerramentas() {
                                 <select value={pendAtdSistema} onChange={e => setPendAtdSistema(e.target.value)} className={inputClass}>{sistemaOptions.map(o => <option key={o}>{o}</option>)}</select>
                               </div>
                             </div>
-                            <label className={labelClass}>Setor / Local:</label>
-                            <select value={pendAtdSetor} onChange={e => setPendAtdSetor(e.target.value)} className={inputClass}>
-                              <option value="">Selecione o setor...</option>
-                              {setorOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                            </select>
+                            <label className={labelClass}>Setor:</label>
+                            <input type="text" value={pendAtdSetor} onChange={e => setPendAtdSetor(e.target.value)} className={inputClass} placeholder="Ex: 3ª Vara Cível..." />
                             <label className={labelClass}>Descrição: *</label>
                             <input type="text" value={pendAtdDescricao} onChange={e => setPendAtdDescricao(e.target.value)} className={inputClass} placeholder="Descreva o atendimento..." />
                             <div className="grid grid-cols-2 gap-2 mt-1">
@@ -487,11 +447,8 @@ export function PainelFerramentas() {
             <input type="date" value={atdData} onChange={(e) => setAtdData(e.target.value)} className={`${inputClass} focus:ring-blue-500`} />
             <label className={labelClass}>Usuário:</label>
             <select value={atdUsuario} onChange={(e) => setAtdUsuario(e.target.value)} className={`${inputClass} focus:ring-blue-500`}>{usuarioOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}</select>
-            <label className={labelClass}>Setor / Local:</label>
-            <select value={atdSetor} onChange={(e) => setAtdSetor(e.target.value)} className={`${inputClass} focus:ring-blue-500`}>
-              <option value="">Selecione o setor...</option>
-              {setorOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-            </select>
+            <label className={labelClass}>Setor:</label>
+            <input type="text" value={atdSetor} onChange={(e) => setAtdSetor(e.target.value)} className={`${inputClass} focus:ring-blue-500`} />
             <label className={labelClass}>Sistema:</label>
             <select value={atdSistema} onChange={(e) => setAtdSistema(e.target.value)} className={`${inputClass} focus:ring-blue-500`}>{sistemaOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}</select>
             <label className={labelClass}>Descrição: *</label>
@@ -588,24 +545,26 @@ export function PainelFerramentas() {
       {modalAberto === 'lanche' && (
         <div className="fixed inset-0 z-50 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl p-6 border border-gray-200">
-            <h3 className="text-xl font-extrabold text-amber-600 mb-4 flex items-center gap-2">🍔 Pedido de Lanche</h3>
+            <h3 className="text-xl font-extrabold text-amber-600 mb-4 flex items-center gap-2">🥪 Pedido de Lanche</h3>
+            <label className={labelClass}>Senha:</label>
+            <input type="text" value={lancheSenha} onChange={(e) => setLancheSenha(e.target.value)} className={`${inputClass} focus:ring-amber-500`} placeholder="Sua senha..." />
             <label className={labelClass}>Lanche:</label>
             <input type="text" value={lancheItem} onChange={(e) => setLancheItem(e.target.value)} className={`${inputClass} focus:ring-amber-500`} placeholder="Ex: X-Burguer, Coxinha..." />
             <label className={labelClass}>Estabelecimento:</label>
             <input type="text" value={lancheEstabelecimento} onChange={(e) => setLancheEstabelecimento(e.target.value)} className={`${inputClass} focus:ring-amber-500`} placeholder="Ex: Lanchonete do João..." />
             <div className="flex gap-2 mt-6">
               <button
-                disabled={loading || !lancheItem || !lancheEstabelecimento}
+                disabled={loading || !lancheItem || !lancheEstabelecimento || !lancheSenha}
                 onClick={async () => {
                   setLoading(true)
                   try {
-                    const mensagem_whatsapp = `🍔 *Pedido de Lanche*\n👤 *Consultor:* ${meuLogin}\n🍽️ *Lanche:* ${lancheItem}\n🏪 *Estabelecimento:* ${lancheEstabelecimento}`
+                    const mensagem_whatsapp = `🥪 *Pedido de Lanche*\n👤 *Consultor:* ${meuLogin}\n🔑 *Senha:* ${lancheSenha}\n🍽️ *Lanche:* ${lancheItem}\n🏪 *Estabelecimento:* ${lancheEstabelecimento}`
                     const res = await fetch("https://matheusgomes12.app.n8n.cloud/webhook/f60ac38f-0e70-4d58-8404-352ba3a22fd0", {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ mensagem_whatsapp, consultor: meuLogin, lanche: lancheItem, estabelecimento: lancheEstabelecimento, timestamp: new Date().toISOString() })
+                      body: JSON.stringify({ mensagem_whatsapp, consultor: meuLogin, senha: lancheSenha, lanche: lancheItem, estabelecimento: lancheEstabelecimento, timestamp: new Date().toISOString() })
                     })
-                    if (res.ok) { alert("✅ Pedido de lanche enviado!"); setModalAberto(null); setLancheItem(''); setLancheEstabelecimento('') }
+                    if (res.ok) { alert("✅ Pedido de lanche enviado!"); setModalAberto(null); setLancheItem(''); setLancheEstabelecimento(''); setLancheSenha('') }
                     else { alert("❌ Falha ao enviar para o n8n.") }
                   } catch { alert("❌ Erro inesperado ao enviar.") }
                   finally { setLoading(false) }

@@ -1659,13 +1659,106 @@ function AbaAuditoriaTempoReal() {
   )
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ABA OBSERVAÇÕES SESSÕES (Gestor)
+// ─────────────────────────────────────────────────────────────────────────────
+interface ObsSessaoGestor {
+  id:string; sessao_id:string; sessao_nome:string; data:string; consultor:string;
+  observacao?:string; pre_contato_nome?:string; pre_contato_ramal?:string; pre_obs?:string;
+  pos_contato_nome?:string; pos_contato_ramal?:string; pos_obs?:string; eproc_situacao?:string;
+}
+function AbaObservacoesSessoes(){
+  const[obs,setObs]=useState<ObsSessaoGestor[]>([])
+  const[loading,setLoading]=useState(true)
+  const[dataFiltro,setDataFiltro]=useState(hoje())
+  const[filtroConsultor,setFiltroConsultor]=useState('Todos')
+
+  useEffect(()=>{load()},[dataFiltro])
+  async function load(){
+    setLoading(true)
+    const{data}=await supabase.from('observacoes_sessoes').select('*').eq('data',dataFiltro).order('sessao_nome')
+    setObs(data||[]); setLoading(false)
+  }
+
+  const consultores=USUARIOS_SISTEMA.filter(u=>u.perfil==='Consultor').map(u=>u.nome)
+  const obsFiltradas=obs.filter(o=>filtroConsultor==='Todos'||o.consultor===filtroConsultor)
+  const nomeExib=(n:string)=>{const p=n.trim().split(' ').filter(Boolean);return p.length<=1?p[0]:`${p[0]} ${p[p.length-1]}`}
+
+  return(
+    <div>
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
+        <input type="date" value={dataFiltro} onChange={e=>setDataFiltro(e.target.value)}
+          className="border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold outline-none"/>
+        <select value={filtroConsultor} onChange={e=>setFiltroConsultor(e.target.value)}
+          className="border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold outline-none">
+          <option value="Todos">Todos os consultores</option>
+          {consultores.map(c=><option key={c}>{c}</option>)}
+        </select>
+        <span className="text-xs text-gray-400 font-bold">{obsFiltradas.length} observação(ões)</span>
+      </div>
+
+      {loading?<Spinner/>
+      :obsFiltradas.length===0
+        ?<p className="text-center text-gray-400 italic py-12">Nenhuma observação registrada neste dia.</p>
+        :<div className="space-y-4">
+          {obsFiltradas.map(o=>(
+            <div key={o.id} className="bg-white border-2 border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+              {/* Header */}
+              <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border-b border-indigo-100 px-5 py-3 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-black text-indigo-700">{o.sessao_nome}</p>
+                  <p className="text-[11px] text-gray-500">{new Date(o.data+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'})}</p>
+                </div>
+                <span className="text-xs font-black bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full">{nomeExib(o.consultor)}</span>
+              </div>
+              <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Observação geral */}
+                {o.observacao&&(
+                  <div className="md:col-span-2 bg-gray-50 rounded-xl p-3">
+                    <p className="text-[10px] font-black text-gray-400 uppercase mb-1">💬 Observação geral</p>
+                    <p className="text-sm text-gray-700">{o.observacao}</p>
+                  </div>
+                )}
+                {/* EPROC situação */}
+                {o.eproc_situacao&&(
+                  <div className="bg-green-50 border border-green-200 rounded-xl p-3">
+                    <p className="text-[10px] font-black text-green-600 uppercase mb-1">🟢 EPROC — Situação</p>
+                    <p className="text-sm text-green-800">{o.eproc_situacao}</p>
+                  </div>
+                )}
+                {/* Pré-sessão */}
+                {(o.pre_contato_nome||o.pre_obs)&&(
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                    <p className="text-[10px] font-black text-amber-700 uppercase mb-2">📞 Contato PRÉ-sessão</p>
+                    {o.pre_contato_nome&&<p className="text-xs font-bold text-gray-700">👤 {o.pre_contato_nome}{o.pre_contato_ramal?` · Ramal: ${o.pre_contato_ramal}`:''}</p>}
+                    {o.pre_obs&&<p className="text-xs text-gray-600 mt-1 italic">{o.pre_obs}</p>}
+                  </div>
+                )}
+                {/* Pós-sessão */}
+                {(o.pos_contato_nome||o.pos_obs)&&(
+                  <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3">
+                    <p className="text-[10px] font-black text-indigo-700 uppercase mb-2">📞 Contato PÓS-sessão</p>
+                    {o.pos_contato_nome&&<p className="text-xs font-bold text-gray-700">👤 {o.pos_contato_nome}{o.pos_contato_ramal?` · Ramal: ${o.pos_contato_ramal}`:''}</p>}
+                    {o.pos_obs&&<p className="text-xs text-gray-600 mt-1 italic">{o.pos_obs}</p>}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      }
+    </div>
+  )
+}
+
 export function PainelGerencial({ inline = false, perfil = 'Gestor' }: { inline?: boolean; perfil?: string }) {
 
   const isConsultor = perfil === 'Consultor';
   const abas = isConsultor
     ? ['Geral', 'Semanal', 'Certidões']
-    : ['Auditoria', '🔴 Tempo Real', 'Geral', 'Diário', 'Semanal', 'Certidões', 'Horas Extras'];
-  const icons: Record<string, string> = { 'Auditoria': '🔍', '🔴 Tempo Real': '🔴', 'Geral': '📊', 'Diário': '📅', 'Semanal': '📆', 'Certidões': '📋', 'Horas Extras': '⏰' };
+    : ['Auditoria', '🔴 Tempo Real', 'Geral', 'Diário', 'Semanal', 'Certidões', 'Horas Extras', '📝 Obs. Sessões'];
+  const icons: Record<string, string> = { 'Auditoria': '🔍', '🔴 Tempo Real': '🔴', 'Geral': '📊', 'Diário': '📅', 'Semanal': '📆', 'Certidões': '📋', 'Horas Extras': '⏰', '📝 Obs. Sessões': '📝' };
   const [aba, setAba] = useState(isConsultor ? 'Geral' : 'Auditoria');
 
   return (
@@ -1690,6 +1783,7 @@ export function PainelGerencial({ inline = false, perfil = 'Gestor' }: { inline?
       <div className="p-6">
         {aba === 'Auditoria'    && <AbaAuditoria />}
         {aba === '🔴 Tempo Real' && <AbaAuditoriaTempoReal />}
+        {aba === '📝 Obs. Sessões' && <AbaObservacoesSessoes />}
         {aba === 'Geral'     && <AbaGeral perfil={perfil} />}
         {aba === 'Diário'    && <AbaDiario />}
         {aba === 'Semanal'   && <AbaSemanal />}

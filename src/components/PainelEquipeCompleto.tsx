@@ -6,8 +6,16 @@ import { TODOS_CONSULTORES, EQUIPE_EPROC, EQUIPE_JPE } from '../constants'
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface AgendaDetalhe { id:string;data:string;nome_sessao:string;modalidade?:string;horario?:string;plenario?:string;descricao?:string;pauta?:number;mesa?:number;consultores:string[];criado_por:string;criado_em:string }
 interface AgendaAtividade { id:string;data:string;tipo:string;observacao?:string;consultores:string[];criado_por:string;criado_em:string }
-interface Plantao { id:string;tipo_dia:string;date:string;plantonistas:string }
+interface Plantao { id:number|string;tipo_dia:string;date:string;plantonistas:string }
 interface Ferias { id:string;consultor:string;ano:number;inicio:string;fim:string;observacao?:string }
+
+interface ObsSessao {
+  id?:string; sessao_id:string; sessao_nome:string; data:string; consultor:string;
+  observacao?:string;
+  pre_contato_nome?:string; pre_contato_ramal?:string; pre_obs?:string;
+  pos_contato_nome?:string; pos_contato_ramal?:string; pos_obs?:string;
+  eproc_situacao?:string;
+}
 interface SalaReserva { id:string;data:string;turno:string;titulo:string;descricao?:string;responsavel?:string }
 interface TreinamentoExterno { id:string;data:string;tipo:string;local_nome:string;local_tipo?:string;consultores:string[];observacao?:string }
 
@@ -383,6 +391,26 @@ const TIPO_ATIV_CFG:Record<string,{icon:string;badge:string}>={
 }
 const getCfgAtv=(t:string)=>TIPO_ATIV_CFG[t]??{icon:'📌',badge:'bg-gray-100 text-gray-600'}
 
+
+// Verifica se consultor da sessão bate com o filtro
+// Usa primeiro+último nome para evitar ambiguidade (Marina Amaral ≠ Marina Marques)
+function matchConsultor(nomesSessao:string[], filtro:string):boolean {
+  if(filtro==='Todos') return true
+  const primUlt=(n:string)=>{const p=n.trim().split(' ').filter(Boolean);return p.length<=1?p[0].toLowerCase():`${p[0]} ${p[p.length-1]}`.toLowerCase()}
+  const filtroNorm=primUlt(filtro)
+  return nomesSessao.some(n=>{
+    if(n.toLowerCase()===filtro.toLowerCase()) return true       // exato
+    if(primUlt(n)===filtroNorm) return true                      // primeiro+último
+    // só usa match por primeiro nome se não há ambiguidade (nome único no sistema)
+    const primeiroFiltro=filtro.split(' ')[0].toLowerCase()
+    const primeiroDaLista=n.split(' ')[0].toLowerCase()
+    if(primeiroFiltro===primeiroDaLista){
+      // se filtro tem mais de um token, já usou o match acima — sem ambiguidade extra
+      return filtro.split(' ').length===1 && primeiroDaLista===primeiroFiltro
+    }
+    return false
+  })
+}
 // ─── Hook: verifica férias de um consultor em uma data ────────────────────────
 function useConsultoresDisponiveis(data:string,ferias:Ferias[]):Set<string>{
   return useMemo(()=>{
@@ -438,9 +466,12 @@ function AbaSessoes({canEdit,ferias}:{canEdit:boolean;ferias:Ferias[]}){
   const[sessoes,setSessoes]=useState<AgendaDetalhe[]>([])
   const[loading,setLoading]=useState(false)
   const[copiando,setCopiando]=useState(false)
-  const[filtro,setFiltro]=useState('Todos')
+  const[filtro,setFiltro]=useState(()=>meuLogin||'Todos')
   const[modal,setModal]=useState<{data:string;item?:AgendaDetalhe}|null>(null)
   const[popover,setPopover]=useState<AgendaDetalhe|null>(null)
+  const[obsModal,setObsModal]=useState<{sessao:AgendaDetalhe}|null>(null)
+  const[obsData,setObsData]=useState<ObsSessao|null>(null)
+  const[obsSalvando,setObsSalvando]=useState(false)
   // form
   const[nomeFiltro,setNomeFiltro]=useState('')
   const[nomeSessao,setNomeSessao]=useState('')
@@ -475,6 +506,20 @@ function AbaSessoes({canEdit,ferias}:{canEdit:boolean;ferias:Ferias[]}){
     setConsultores(item?.consultores??[]); setModal({data,item})
   }
 
+  async function abrirObs(sessao:AgendaDetalhe){
+    const loginAtual=meuLogin||''
+    const{data}=await supabase.from('observacoes_sessoes').select('*')
+      .eq('sessao_id',sessao.id).eq('consultor',loginAtual).maybeSingle()
+    setObsData(data||{sessao_id:sessao.id,sessao_nome:sessao.nome_sessao,data:sessao.data,consultor:loginAtual})
+    setObsModal({sessao})
+  }
+  async function salvarObs(){
+    if(!obsData)return
+    setObsSalvando(true)
+    const{error:errObs}=await supabase.from('observacoes_sessoes').upsert({...obsData},{onConflict:'sessao_id,consultor'})
+    if(errObs){alert('Erro ao salvar observação: '+errObs.message);setObsSalvando(false);return}
+    setObsSalvando(false); setObsModal(null)
+  }
   const catFiltrado=useMemo(()=>nomeFiltro?SESSOES_CATALOGO.filter(s=>s.toLowerCase().includes(nomeFiltro.toLowerCase())):SESSOES_CATALOGO,[nomeFiltro])
 
   function selecionarCat(nome:string){
@@ -492,9 +537,11 @@ function AbaSessoes({canEdit,ferias}:{canEdit:boolean;ferias:Ferias[]}){
       horario:horario||undefined,plenario:plenario||undefined,descricao:descricao.trim()||undefined,
       pauta:pauta?Number(pauta):undefined,mesa:mesa?Number(mesa):undefined,
       consultores,criado_por:meuLogin||'',criado_em:new Date().toISOString()}
-    if(modal?.item){await supabase.from('agenda_detalhes').update(payload).eq('id',modal.item.id)}
-    else if(existe){await supabase.from('agenda_detalhes').update(payload).eq('id',existe.id)}
-    else{await supabase.from('agenda_detalhes').insert(payload)}
+    let errSessao:any=null
+    if(modal?.item){({error:errSessao}=await supabase.from('agenda_detalhes').update(payload).eq('id',modal.item.id))}
+    else if(existe){({error:errSessao}=await supabase.from('agenda_detalhes').update(payload).eq('id',existe.id))}
+    else{({error:errSessao}=await supabase.from('agenda_detalhes').insert(payload))}
+    if(errSessao){alert('Erro ao salvar sessão: '+errSessao.message);setSalvando(false);return}
     setSalvando(false); setModal(null)
     const{data}=await supabase.from('agenda_detalhes').select('*').gte('data',start).lte('data',endSun).order('data').order('horario',{nullsFirst:false})
     setSessoes(data||[])
@@ -531,7 +578,7 @@ function AbaSessoes({canEdit,ferias}:{canEdit:boolean;ferias:Ferias[]}){
     for(const d of weekDays)map[fmtLocal(d)]=[]
     for(const s of sessoes){
       if(!map[s.data])continue
-      if(filtro!=='Todos'&&!s.consultores.includes(filtro))continue
+      if(!matchConsultor(s.consultores,filtro))continue
       map[s.data].push(s)
     }
     return map
@@ -614,12 +661,16 @@ function AbaSessoes({canEdit,ferias}:{canEdit:boolean;ferias:Ferias[]}){
                         <div className="flex items-start justify-between mb-1.5">
                           <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${mi.badge}`}>{mi.emoji} {mi.label}</span>
                           {canEdit&&<button onClick={e=>{e.stopPropagation();handleDeletar(s.id)}} className="w-5 h-5 rounded-md bg-red-50 hover:bg-red-100 border border-red-200 flex items-center justify-center text-[10px] text-red-400 flex-shrink-0">✕</button>}
+                          {(meuLogin&&matchConsultor(s.consultores,meuLogin))&&<button onClick={e=>{e.stopPropagation();abrirObs(s)}} className="w-5 h-5 rounded-md bg-blue-50 hover:bg-blue-100 border border-blue-200 flex items-center justify-center text-[10px] text-blue-400 flex-shrink-0" title="Minhas observações">📝</button>}
                         </div>
                         <p className="text-xs font-black leading-snug mb-1.5 text-gray-800">{s.nome_sessao}</p>
                         {s.horario&&<p className="text-[10px] text-gray-500 mb-1.5">🕐 {s.horario}{s.plenario?` · Pl.${s.plenario}`:''}</p>}
                         <div className="flex flex-wrap gap-0.5">
                           {s.consultores.map(c=><ChipConsultor key={c} nome={c}/>)}
                         </div>
+                        {!canEdit&&s.consultores.includes(meuLogin||'')&&(
+                          <button onClick={e=>{e.stopPropagation();abrirObs(s)}} className="mt-1.5 text-[9px] font-bold text-blue-500 hover:text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-1.5 py-0.5 w-full text-center">📝 Observações</button>
+                        )}
                         </div>
                       </div>
                     )
@@ -693,6 +744,84 @@ function AbaSessoes({canEdit,ferias}:{canEdit:boolean;ferias:Ferias[]}){
         </div>
       )}
 
+
+      {/* Modal de observações da sessão */}
+      {obsModal&&(
+        <div className="fixed inset-0 z-[700] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden max-h-[95vh] flex flex-col">
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-5 text-white flex justify-between items-start flex-shrink-0">
+              <div>
+                <p className="text-[10px] text-white/60 uppercase font-bold">Observações da Sessão</p>
+                <h3 className="text-sm font-black">{obsModal.sessao.nome_sessao}</h3>
+                <p className="text-[10px] text-white/60">{new Date(obsModal.sessao.data+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'})}</p>
+              </div>
+              <button onClick={()=>setObsModal(null)} className="text-white/60 hover:text-white text-xl">✕</button>
+            </div>
+            <div className="overflow-y-auto flex-1 p-5 space-y-4">
+
+              {/* Observação geral */}
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">💬 Observação geral</label>
+                <textarea value={obsData?.observacao||''} onChange={e=>setObsData(d=>d?{...d,observacao:e.target.value}:d)}
+                  rows={3} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold outline-none resize-none" placeholder="Anotações sobre a sessão..."/>
+              </div>
+
+              {/* EPROC - Situação */}
+              <div>
+                <label className="block text-[10px] font-black text-green-600 uppercase mb-1">🟢 EPROC — Situação</label>
+                <input value={obsData?.eproc_situacao||''} onChange={e=>setObsData(d=>d?{...d,eproc_situacao:e.target.value}:d)}
+                  className="w-full border border-green-200 rounded-xl px-3 py-2 text-sm font-bold outline-none bg-green-50" placeholder="Ex: Processos em dia, pendências..."/>
+              </div>
+
+              {/* Tentativa pré-sessão */}
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                <p className="text-[10px] font-black text-amber-700 uppercase mb-2">📞 Tentativa de contato PRÉ-sessão</p>
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <div>
+                    <label className="block text-[10px] text-gray-400 font-bold mb-1">Nome</label>
+                    <input value={obsData?.pre_contato_nome||''} onChange={e=>setObsData(d=>d?{...d,pre_contato_nome:e.target.value}:d)}
+                      className="w-full border border-amber-200 rounded-lg px-2 py-1.5 text-xs font-bold outline-none" placeholder="Nome do contato..."/>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-gray-400 font-bold mb-1">Ramal</label>
+                    <input value={obsData?.pre_contato_ramal||''} onChange={e=>setObsData(d=>d?{...d,pre_contato_ramal:e.target.value}:d)}
+                      className="w-full border border-amber-200 rounded-lg px-2 py-1.5 text-xs font-bold outline-none" placeholder="Ex: 1234"/>
+                  </div>
+                </div>
+                <label className="block text-[10px] text-gray-400 font-bold mb-1">Observação pré</label>
+                <input value={obsData?.pre_obs||''} onChange={e=>setObsData(d=>d?{...d,pre_obs:e.target.value}:d)}
+                  className="w-full border border-amber-200 rounded-lg px-2 py-1.5 text-xs font-bold outline-none" placeholder="Ex: Atendeu, não atendeu, caixa postal..."/>
+              </div>
+
+              {/* Tentativa pós-sessão */}
+              <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3">
+                <p className="text-[10px] font-black text-indigo-700 uppercase mb-2">📞 Tentativa de contato PÓS-sessão</p>
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <div>
+                    <label className="block text-[10px] text-gray-400 font-bold mb-1">Nome</label>
+                    <input value={obsData?.pos_contato_nome||''} onChange={e=>setObsData(d=>d?{...d,pos_contato_nome:e.target.value}:d)}
+                      className="w-full border border-indigo-200 rounded-lg px-2 py-1.5 text-xs font-bold outline-none" placeholder="Nome do contato..."/>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-gray-400 font-bold mb-1">Ramal</label>
+                    <input value={obsData?.pos_contato_ramal||''} onChange={e=>setObsData(d=>d?{...d,pos_contato_ramal:e.target.value}:d)}
+                      className="w-full border border-indigo-200 rounded-lg px-2 py-1.5 text-xs font-bold outline-none" placeholder="Ex: 1234"/>
+                  </div>
+                </div>
+                <label className="block text-[10px] text-gray-400 font-bold mb-1">Observação pós</label>
+                <input value={obsData?.pos_obs||''} onChange={e=>setObsData(d=>d?{...d,pos_obs:e.target.value}:d)}
+                  className="w-full border border-indigo-200 rounded-lg px-2 py-1.5 text-xs font-bold outline-none" placeholder="Ex: Retornou, problema resolvido..."/>
+              </div>
+            </div>
+            <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0">
+              <button onClick={salvarObs} disabled={obsSalvando} className="flex-[2] bg-blue-600 hover:bg-blue-700 text-white font-black py-3 rounded-xl disabled:opacity-50">
+                {obsSalvando?'Salvando...':'💾 Salvar Observações'}
+              </button>
+              <button onClick={()=>setObsModal(null)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-3 rounded-xl">Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Popover read-only */}
       {popover&&(
         <div className="fixed inset-0 z-[600] bg-black/50 flex items-center justify-center p-4" onClick={()=>setPopover(null)}>
@@ -771,9 +900,11 @@ function AbaAtividades({canEdit,ferias}:{canEdit:boolean;ferias:Ferias[]}){
     setSalvando(true)
     const existe=itens.find(i=>i.data===dataForm&&i.tipo===tipoFinal)
     const payload={data:dataForm,tipo:tipoFinal,observacao:observacao.trim()||undefined,horario:horarioAtv||undefined,setor:setor||undefined,consultores,criado_por:meuLogin||'',criado_em:new Date().toISOString()}
-    if(modal?.item){await supabase.from('agenda_atividades').update(payload).eq('id',modal.item.id)}
-    else if(existe){await supabase.from('agenda_atividades').update(payload).eq('id',existe.id)}
-    else{await supabase.from('agenda_atividades').insert(payload)}
+    let errAtv:any=null
+    if(modal?.item){({error:errAtv}=await supabase.from('agenda_atividades').update(payload).eq('id',modal.item.id))}
+    else if(existe){({error:errAtv}=await supabase.from('agenda_atividades').update(payload).eq('id',existe.id))}
+    else{({error:errAtv}=await supabase.from('agenda_atividades').insert(payload))}
+    if(errAtv){alert('Erro ao salvar atividade: '+errAtv.message);setSalvando(false);return}
     setSalvando(false); setModal(null)
     const{data}=await supabase.from('agenda_atividades').select('*').gte('data',start).lte('data',endSun).order('data').order('tipo')
     setItens(data||[])
@@ -810,7 +941,7 @@ function AbaAtividades({canEdit,ferias}:{canEdit:boolean;ferias:Ferias[]}){
     for(const d of weekDays)map[fmtLocal(d)]=[]
     for(const it of itens){
       if(!map[it.data])continue
-      if(filtro!=='Todos'&&!it.consultores.includes(filtro))continue
+      if(!matchConsultor(it.consultores,filtro))continue
       map[it.data].push(it)
     }
     return map
@@ -920,16 +1051,51 @@ function AbaAtividades({canEdit,ferias}:{canEdit:boolean;ferias:Ferias[]}){
                 {getCfgAtv(tipoFinal).icon} {tipoFinal}
               </div>}
 
-              <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 mt-3">Horário (opcional)</label>
-              <input type="time" value={horarioAtv} onChange={e=>setHorarioAtv(e.target.value)} className={inp}/>
               <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 mt-3">Cartório / Gabinete (opcional)</label>
               {!setorManual?(
                 <>
                   <div className="flex gap-1 mb-1">
                     <input type="text" value={setorFiltro}
                       onChange={e=>{setSetorFiltro(e.target.value);setShowSetorDD(true)}}
-                      onFocus={()=>setShowSetorDD(true)}
-                      className={inp+' flex-1 !mb-0'} placeholder={setor||"Selecionar cartório ou gabinete..."}/>
+                      className={inp+' flex-1 !mb-0'} placeholder={setor||"Buscar cartório ou gabinete..."}/>
+                    {setor&&<button onClick={()=>{setSetor('');setSetorFiltro('');setShowSetorDD(false)}}
+                      className="text-gray-400 hover:text-red-500 px-2 text-sm font-bold flex-shrink-0">✕</button>}
+                  </div>
+                  {setor&&!showSetorDD&&<p className="text-[10px] text-blue-600 font-bold mb-1">📍 {setor}</p>}
+                  {showSetorDD&&(
+                    <div className="border border-gray-200 rounded-xl overflow-hidden max-h-36 overflow-y-auto shadow-md mb-1 z-10 relative bg-white">
+                      {(setorFiltro?GABINETES_2GRAU.filter(g=>g.toLowerCase().includes(setorFiltro.toLowerCase())):GABINETES_2GRAU).slice(0,20).map(g=>(
+                        <button key={g} onClick={()=>{setSetor(g);setSetorFiltro('');setShowSetorDD(false)}}
+                          className="w-full text-left px-3 py-1.5 text-xs font-bold hover:bg-blue-50 hover:text-blue-700 border-b border-gray-50 last:border-0">{g}</button>
+                      ))}
+                    </div>
+                  )}
+                  <button onClick={()=>{setSetorManual(true);setSetor('');setSetorFiltro('');setShowSetorDD(false)}}
+                    className="text-[10px] text-blue-600 font-bold mb-2 block hover:underline">+ Digitar manualmente</button>
+                </>
+              ):(
+                <>
+                  <div className="flex gap-1 mb-1">
+                    <input type="text" value={setor} onChange={e=>setSetor(e.target.value)}
+                      className={inp+' flex-1 !mb-0'} placeholder="Digite o nome do local..." autoFocus/>
+                    {setor&&<button onClick={()=>setSetor('')}
+                      className="text-gray-400 hover:text-red-500 px-2 text-sm font-bold flex-shrink-0">✕</button>}
+                  </div>
+                  <button onClick={()=>{setSetorManual(false);setSetor('');setSetorFiltro('')}}
+                    className="text-[10px] text-gray-400 font-bold mb-2 block hover:underline">← Voltar para lista</button>
+                </>
+              )}
+
+              <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 mt-3">Horário (opcional)</label>
+              <input type="time" value={horarioAtv} onChange={e=>setHorarioAtv(e.target.value)} className={inp}/>
+
+              <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 mt-3">Cartório / Gabinete (opcional)</label>
+              {!setorManual?(
+                <>
+                  <div className="flex gap-1 mb-1">
+                    <input type="text" value={setorFiltro}
+                      onChange={e=>{setSetorFiltro(e.target.value);setShowSetorDD(true)}}
+                      className={inp+' flex-1 !mb-0'} placeholder={setor||"Buscar cartório ou gabinete..."}/>
                     {setor&&<button onClick={()=>{setSetor('');setSetorFiltro('');setShowSetorDD(false)}}
                       className="text-gray-400 hover:text-red-500 px-2 text-sm font-bold flex-shrink-0">✕</button>}
                   </div>
@@ -984,6 +1150,7 @@ function AbaPlantoes({canEdit,meuLogin}:{canEdit:boolean;meuLogin:string}){
   const[loading,setLoading]=useState(true)
   const[modal,setModal]=useState<Plantao|null>(null)
   const[form,setForm]=useState({tipo_dia:'',date:'',plantonistas:''})
+  const[selecionados,setSelecionados]=useState<string[]>([])
   const[salvando,setSalvando]=useState(false)
 
   useEffect(()=>{load()},[])
@@ -993,23 +1160,80 @@ function AbaPlantoes({canEdit,meuLogin}:{canEdit:boolean;meuLogin:string}){
     const{data}=await supabase.from('plantonistas_fds').select('*').gte('date',hoje).order('date').limit(30)
     setPlantoes(data||[]); setLoading(false)
   }
+
+  function abrirModal(p?:Plantao){
+    if(p){
+      setModal(p)
+      setForm({tipo_dia:p.tipo_dia,date:p.date,plantonistas:p.plantonistas})
+    // Parse nomes salvos — suporta vírgula, " e ", "/"
+      const nomesRaw=p.plantonistas.replace(/ e /gi,',').replace(/\//g,',').split(',').map((n:string)=>n.trim()).filter(Boolean)
+      // Mapeia para nomes completos
+      const nomesMatch:string[]=[]
+      for(const n of nomesRaw){
+        const found=TODOS_CONSULTORES.find(c=>
+          c.toLowerCase()===n.toLowerCase()||
+          c.toLowerCase().startsWith(n.toLowerCase()+' ')||
+          n.toLowerCase().startsWith(c.split(' ')[0].toLowerCase()+' ')||
+          c.split(' ')[0].toLowerCase()===n.toLowerCase()
+        )
+        nomesMatch.push(found||n)
+      }
+      setSelecionados(nomesMatch)
+      // Atualiza form com nomes já parseados para o save funcionar
+      setForm(f=>({...f,plantonistas:nomesMatch.join(', ')}))
+    } else {
+      setModal({id:0,tipo_dia:'',date:'',plantonistas:''})
+      setForm({tipo_dia:'',date:'',plantonistas:''})
+      setSelecionados([])
+    }
+  }
+
+  function toggleConsultor(nome:string){
+    setSelecionados(prev=>{
+      const novo=prev.includes(nome)?prev.filter(n=>n!==nome):[...prev,nome]
+      setForm(f=>({...f,plantonistas:novo.join(', ')}))
+      return novo
+    })
+  }
+
   async function handleSalvar(){
-    if(!form.tipo_dia||!form.date||!form.plantonistas)return alert('Preencha todos os campos!')
+    if(!form.tipo_dia||!form.date)return alert('Preencha tipo e data!')
+    if(selecionados.length===0)return alert('Selecione ao menos um plantonista!')
     setSalvando(true)
-    if(modal?.id){await supabase.from('plantonistas_fds').update({...form}).eq('id',modal.id)}
-    else{await supabase.from('plantonistas_fds').insert({...form})}
+    const payload={
+      tipo_dia:form.tipo_dia,
+      date:form.date,
+      plantonistas:selecionados.join(', ')
+    }
+    console.log('🔴 Salvando plantão:', {modal_id:modal?.id, payload, isEdit:!!modal?.id && modal.id !== 0})
+    const isEdit = modal?.id && modal.id !== 0
+    if(isEdit){
+      console.log('🔴 UPDATE id=', Number(modal!.id))
+      const{error,data}=await supabase.from('plantonistas_fds').update(payload).eq('id',Number(modal!.id)).select()
+      console.log('🔴 UPDATE result:', {error, data})
+      if(error){alert('Erro ao editar: '+error.message);setSalvando(false);return}
+    } else {
+      console.log('🔴 INSERT')
+      const{error,data}=await supabase.from('plantonistas_fds').insert(payload).select()
+      console.log('🔴 INSERT result:', {error, data})
+      if(error){alert('Erro ao criar: '+error.message);setSalvando(false);return}
+    }
     setSalvando(false); setModal(null); await load()
   }
+
   async function handleDeletar(id:string){
     if(!confirm('Remover?'))return
-    await supabase.from('plantonistas_fds').delete().eq('id',id); await load()
+    await supabase.from('plantonistas_fds').delete().eq('id',Number(id)); await load()
   }
+
   const inp="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold mb-3 outline-none"
+  const TIPOS_PLANTAO=['Plantão','Feriado','Carnaval','Recesso','Emenda']
+
   return(
     <div>
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-base font-black text-gray-700">🚨 Próximos Plantões e Feriados</h3>
-        {canEdit&&<button onClick={()=>{setModal({id:'',tipo_dia:'',date:'',plantonistas:''});setForm({tipo_dia:'',date:'',plantonistas:''})}}
+        {canEdit&&<button onClick={()=>abrirModal()}
           className="bg-red-500 hover:bg-red-600 text-white font-bold px-4 py-2 rounded-xl text-sm">+ Plantão</button>}
       </div>
       {loading?<div className="flex justify-center py-8"><div className="w-7 h-7 border-4 border-red-400 border-t-transparent rounded-full animate-spin"/></div>
@@ -1017,35 +1241,72 @@ function AbaPlantoes({canEdit,meuLogin}:{canEdit:boolean;meuLogin:string}){
         {plantoes.length===0&&<p className="text-sm text-gray-400 italic">Nenhum plantão cadastrado.</p>}
         {plantoes.map(p=>{
           const dt=new Date(p.date+'T12:00:00'); const isHoje=p.date===fmtLocal(new Date())
-          const isFeriado=p.tipo_dia.toLowerCase().includes('feriado')||p.tipo_dia.toLowerCase().includes('carnaval')
+          const isFeriado=p.tipo_dia.toLowerCase().includes('feriado')||p.tipo_dia.toLowerCase().includes('carnaval')||p.tipo_dia.toLowerCase().includes('recesso')
           return(
             <div key={p.id} className={`p-4 rounded-2xl border-2 ${isHoje?'border-red-500 bg-red-50':'border-gray-200 bg-white'}`}>
               <div className="flex justify-between items-start mb-2">
                 <span className={`text-[11px] font-black px-2 py-1 rounded-lg ${isFeriado?'bg-amber-200 text-amber-900':'bg-gray-100 text-gray-600'}`}>{isFeriado?'🎉':'📅'} {p.tipo_dia}</span>
                 <div className="flex gap-1">
                   {isHoje&&<span className="text-[10px] font-black bg-red-600 text-white px-2 py-0.5 rounded-full">HOJE</span>}
-                  {canEdit&&<button onClick={()=>{setModal(p);setForm({tipo_dia:p.tipo_dia,date:p.date,plantonistas:p.plantonistas})}} className="text-xs text-gray-400 hover:text-blue-500 px-1">✏️</button>}
+                  {canEdit&&<button onClick={()=>abrirModal(p)} className="text-xs text-gray-400 hover:text-blue-500 px-1">✏️</button>}
                   {canEdit&&<button onClick={()=>handleDeletar(p.id)} className="text-xs text-gray-400 hover:text-red-500 px-1">✕</button>}
                 </div>
               </div>
               <p className="text-sm font-black text-gray-800 mb-1">{dt.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'})}</p>
-              <p className="text-sm font-bold text-indigo-700">👥 {p.plantonistas}</p>
+              <div className="flex flex-wrap gap-1 mt-1">
+                {p.plantonistas.split(',').map(n=>n.trim()).filter(Boolean).map(n=>(
+                  <span key={n} className="text-[10px] font-bold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">{nomeExib(n)}</span>
+                ))}
+              </div>
             </div>
           )
         })}
       </div>}
+
       {modal!==null&&(
         <div className="fixed inset-0 z-[600] bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
             <h3 className="text-base font-black mb-4">{modal.id?'✏️ Editar':'➕ Novo'} plantão</h3>
-            <label className="block text-xs font-black text-gray-400 uppercase mb-1">Tipo / Nome</label>
-            <input value={form.tipo_dia} onChange={e=>setForm(f=>({...f,tipo_dia:e.target.value}))} className={inp} placeholder="Ex: Plantão, Carnaval..."/>
+
+            <label className="block text-xs font-black text-gray-400 uppercase mb-1">Tipo</label>
+            <div className="flex gap-1 flex-wrap mb-3">
+              {TIPOS_PLANTAO.map(t=>(
+                <button key={t} onClick={()=>setForm(f=>({...f,tipo_dia:t}))}
+                  className={`text-xs font-bold px-3 py-1.5 rounded-xl border-2 transition-all ${form.tipo_dia===t?'border-red-500 bg-red-50 text-red-700':'border-gray-200 text-gray-500 hover:border-red-300'}`}>
+                  {t==='Feriado'||t==='Carnaval'||t==='Recesso'?'🎉':'📅'} {t}
+                </button>
+              ))}
+            </div>
+            {!TIPOS_PLANTAO.includes(form.tipo_dia)&&(
+              <input value={form.tipo_dia} onChange={e=>setForm(f=>({...f,tipo_dia:e.target.value}))} className={inp} placeholder="Ou digite o nome..."/>
+            )}
+            {TIPOS_PLANTAO.includes(form.tipo_dia)&&(
+              <button onClick={()=>setForm(f=>({...f,tipo_dia:''}))} className="text-[10px] text-gray-400 hover:underline mb-3 block">+ Digitar manualmente</button>
+            )}
+
             <label className="block text-xs font-black text-gray-400 uppercase mb-1">Data</label>
             <input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} className={inp}/>
-            <label className="block text-xs font-black text-gray-400 uppercase mb-1">Plantonistas</label>
-            <input value={form.plantonistas} onChange={e=>setForm(f=>({...f,plantonistas:e.target.value}))} className={inp} placeholder="Nomes..."/>
-            <div className="flex gap-2 mt-1">
-              <button onClick={handleSalvar} disabled={salvando} className="flex-[2] bg-red-500 hover:bg-red-600 text-white font-black py-3 rounded-xl disabled:opacity-50">💾 Salvar</button>
+
+            <label className="block text-xs font-black text-gray-400 uppercase mb-1">Plantonistas ({selecionados.length})</label>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1 max-h-44 overflow-y-auto border border-gray-100 rounded-xl p-2 bg-gray-50 mb-3">
+              {TODOS_CONSULTORES.map(c=>{
+                const sel=selecionados.includes(c)
+                return(
+                  <button key={c} onClick={()=>toggleConsultor(c)}
+                    className={`text-left text-xs px-2 py-1.5 rounded-lg font-bold border transition-all ${sel?'border-red-500 bg-red-50 text-red-700':'border-gray-200 bg-white text-gray-600 hover:border-red-300'}`}>
+                    {sel&&'✓ '}{nomeExib(c)}
+                  </button>
+                )
+              })}
+            </div>
+            {form.plantonistas&&(
+              <p className="text-[10px] text-gray-500 mb-3">👥 {form.plantonistas}</p>
+            )}
+
+            <div className="flex gap-2">
+              <button onClick={handleSalvar} disabled={salvando} className="flex-[2] bg-red-500 hover:bg-red-600 text-white font-black py-3 rounded-xl disabled:opacity-50">
+                {salvando?'Salvando...':'💾 Salvar'}
+              </button>
               <button onClick={()=>setModal(null)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-3 rounded-xl">Cancelar</button>
             </div>
           </div>
@@ -1079,8 +1340,10 @@ function AbaFerias({canEdit,meuLogin,onFeriasUpdate}:{canEdit:boolean;meuLogin:s
     if(!form.inicio||!form.fim||!modal?.consultor)return alert('Preencha todos os campos!')
     setSalvando(true)
     const payload={consultor:modal.consultor,ano,inicio:form.inicio,fim:form.fim,observacao:form.observacao||null,criado_por:meuLogin}
-    if(modal.item){await supabase.from('ferias_consultores').update(payload).eq('id',modal.item.id)}
-    else{await supabase.from('ferias_consultores').insert(payload)}
+    let errFerias:any=null
+    if(modal.item){({error:errFerias}=await supabase.from('ferias_consultores').update(payload).eq('id',modal.item.id))}
+    else{({error:errFerias}=await supabase.from('ferias_consultores').insert(payload))}
+    if(errFerias){alert('Erro ao salvar férias: '+errFerias.message);setSalvando(false);return}
     setSalvando(false); setModal(null); await load()
   }
   async function handleDeletar(id:string){
@@ -1198,8 +1461,10 @@ function AbaSalaTreinamento({canEdit,meuLogin}:{canEdit:boolean;meuLogin:string}
     if(!form.titulo||!modal)return alert('Informe o título!')
     setSalvando(true)
     const payload={data:modal.data,turno:modal.turno,titulo:form.titulo,descricao:form.descricao||null,responsavel:form.responsavel||null,criado_por:meuLogin}
-    if(modal.item){await supabase.from('sala_treinamento').update(payload).eq('id',modal.item.id)}
-    else{await supabase.from('sala_treinamento').insert(payload)}
+    let errSala:any=null
+    if(modal.item){({error:errSala}=await supabase.from('sala_treinamento').update(payload).eq('id',modal.item.id))}
+    else{({error:errSala}=await supabase.from('sala_treinamento').insert(payload))}
+    if(errSala){alert('Erro ao salvar reserva: '+errSala.message);setSalvando(false);return}
     const{data}=await supabase.from('sala_treinamento').select('*').gte('data',start).lte('data',end)
     setReservas(data||[]); setSalvando(false); setModal(null)
   }
@@ -1304,8 +1569,10 @@ function AbaTreinamentosExternos({canEdit,meuLogin,ferias}:{canEdit:boolean;meuL
     if(!form.data||!form.local_nome)return alert('Preencha data e local!')
     setSalvando(true)
     const payload={data:form.data,tipo:tipoFinal,local_nome:form.local_nome,local_tipo:form.local_tipo||null,consultores:form.consultores,observacao:form.observacao||null,horario:form.horario||null,criado_por:meuLogin}
-    if(modal&&modal!=='new'&&(modal as TreinamentoExterno).id){await supabase.from('treinamentos_externos').update(payload).eq('id',(modal as TreinamentoExterno).id)}
-    else{await supabase.from('treinamentos_externos').insert(payload)}
+    let errTrein:any=null
+    if(modal&&modal!=='new'&&(modal as TreinamentoExterno).id){({error:errTrein}=await supabase.from('treinamentos_externos').update(payload).eq('id',(modal as TreinamentoExterno).id))}
+    else{({error:errTrein}=await supabase.from('treinamentos_externos').insert(payload))}
+    if(errTrein){alert('Erro ao salvar treinamento: '+errTrein.message);setSalvando(false);return}
     setSalvando(false); setModal(null); await load()
   }
   async function handleDeletar(id:string){

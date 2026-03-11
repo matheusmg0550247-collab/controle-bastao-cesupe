@@ -1,5 +1,5 @@
 export const EQUIPE_EPROC = [
-  "Barbara Mara", "Bruno Glaicon", "Douglas Paiva", "Fábio Alves",
+  "Barbara Mara", "Bruno Glaicon", "Claudia Luiza", "Douglas Paiva", "Fábio Alves",
   "Glayce Torres", "Isabela Dias", "Isac Candido", "Ivana Guimarães", "Jonatas", "Leonardo Damaceno",
   "Marcelo Pena Guerra", "Michael Douglas", "Morôni", "Pablo Mol", "Ranyer Segal",
   "Sarah Leal", "Victoria Lisboa"
@@ -18,17 +18,7 @@ export const TODOS_CONSULTORES = [...EQUIPE_EPROC, ...EQUIPE_JPE].sort();
 export const TRIAGEM_HP = ["Pablo Mol", "Leandro"];
 
 export const RAMAIS: Record<string, string> = {
-  "Alex": "2650", "Barbara": "4201", "Bruno": "2644",
-  "Dirceu": "2666", "Douglas": "4210", "Douglas Paiva": "2663", "Fabio": "2665", "Fábio": "2665",
-  "Farley": "2651", "Gilberto": "2645", "Gleis": "4212", "Gleyce": "2647", "Glayce": "2647",
-  "Hugo": "4207", "Igor": "4203", "Isabela": "4205", "Isac": "2517",
-  "Ivana": "2653", "Jerry": "2654", "Jonatas": "2656", "Juliana": "4209",
-  "Larissa": "2661", "Leandro": "2652", "Leonardo": "4204", "Luiz": "4202",
-  "Marcelo": "2655", "Marcelo Pena": "4208", "Marcelo Pena Guerra": "4208", "Marina Amaral": "4211",
-  "Marina Marques": "2607", "Matheus": "2664", "Michael": "2516", "Michael Douglas": "2516",
-  "Morôni": "4206", "Pablo": "2658", "Ranyer": "2669", "Sarah": "2643",
-  "Vanessa": "2510", "Victória": "2660", "Victoria": "2660",
-  "Brenda": ""
+  "Alex": "2650",   "Barbara": "4201",   "Brenda": "2640",   "Bruno": "2644",   "Dirceu": "2666",   "Douglas": "4210",   "Douglas Paiva": "2663",   "Fábio": "2665",   "Fabio": "2665",   "Farley": "2651",   "Gilberto": "2645",   "Gleis": "4212",   "Gleyce": "2647",   "Glayce": "2647",   "Hugo": "4207",   "Igor": "4203",   "Isabela": "4205",   "Isac": "2517",   "Ivana": "2653",   "Jerry": "2654",   "Jonatas": "2656",   "Juliana": "4209",   "Larissa": "2661",   "Leandro": "2652",   "Leonardo": "4204",   "Lívia": "2667",   "Luiz": "4202",   "Marcelo": "2655",   "Marcelo Pena": "4208",   "Marcelo Pena Guerra": "4208",   "Marina Amaral": "4211",   "Marina Marques": "2607",   "Matheus": "2664",   "Michael": "2660",   "Michael Douglas": "2660",   "Morôni": "4206",   "Pablo": "2658",   "Ranyer": "2669",   "Sarah": "2643",   "Vanessa": "2510",   "Victória": "2516",   "Victoria": "2516"
 };
 
 // ========================
