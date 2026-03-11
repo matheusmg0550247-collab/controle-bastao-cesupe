@@ -247,6 +247,69 @@ const LOCAIS_TREINAMENTO = [
   {nome:'Outros',tipo:'Outros'},
 ].sort((a,b)=>a.nome.localeCompare(b.nome))
 
+
+// ─── Gabinetes 2ª instância ───────────────────────────────────────────────────
+const GABINETES_2GRAU = [
+  "1ª Câmara Cível","2ª Câmara Cível","3ª Câmara Cível","4ª Câmara Cível Esp.",
+  "5ª Câmara Cível","6ª Câmara Cível","7ª Câmara Cível","8ª Câmara Cível Esp.",
+  "9ª Câmara Cível","10ª Câmara Cível","11ª Câmara Cível","12ª Câmara Cível",
+  "13ª Câmara Cível","14ª Câmara Cível","15ª Câmara Cível","16ª Câmara Cível Esp.",
+  "17ª Câmara Cível","18ª Câmara Cível","19ª Câmara Cível","20ª Câmara Cível","21ª Câmara Cível",
+  "1ª Câmara Criminal","2ª Câmara Criminal","3ª Câmara Criminal","4ª Câmara Criminal",
+  "5ª Câmara Criminal","6ª Câmara Criminal","7ª Câmara Criminal","8ª Câmara Criminal","9ª Câmara Criminal",
+  "Gab. Des. Alberto Deodato Neto","Gab. Des. Alberto Diniz Júnior","Gab. Des. Alberto Vilas Boas",
+  "Gab. Des. Alexandre Magno Mendes do Valle","Gab. Des. Alexandre Santiago","Gab. Des. Alexandre Victor de Carvalho",
+  "Gab. Des. Amorim Siqueira","Gab. Des. Anacleto Rodrigues","Gab. Des. Arnaldo Maciel",
+  "Gab. Des. Baeta Neves","Gab. Des. Bruno Terra Dias","Gab. Des. Carlos Levenhagen",
+  "Gab. Des. Carlos Roberto de Faria","Gab. Des. Cássio Salomé","Gab. Des. Cavalcante Motta",
+  "Gab. Des. Claret de Moraes","Gab. Des. Corrêa Camargo","Gab. Des. Danton Soares Martins",
+  "Gab. Des. Delvan Barcelos Júnior","Gab. Des. Dirceu Walace Baroni","Gab. Des. Doorgal Borges de Andrada",
+  "Gab. Des. Edison Feital Leite","Gab. Des. Edilson Olímpio Fernandes","Gab. Des. Eduardo Brum",
+  "Gab. Des. Eduardo Machado","Gab. Des. Edir Guerson de Medeiros","Gab. Des. Enéias Xavier Gomes",
+  "Gab. Des. Evandro Lopes da Costa Teixeira","Gab. Des. Fábio Torres de Sousa",
+  "Gab. Des. Fernando Caldeira Brant","Gab. Des. Fernando Lins","Gab. Des. Francisco Costa",
+  "Gab. Des. Franklin Higino Caldeira Filho","Gab. Des. Fortuna Grion","Gab. Des. Gilson Soares Leme",
+  "Gab. Des. Glauco Fernandes","Gab. Des. Guilherme de Azeredo Passos","Gab. Des. Habib Felippe Jabour",
+  "Gab. Des. Henrique Abi-Ackel Torres","Gab. Des. Jair Varão","Gab. Des. Jaubert Carneiro Jaques",
+  "Gab. Des. João Cancio","Gab. Des. Joemilson Donizetti Lopes","Gab. Des. José Américo Martins da Costa",
+  "Gab. Des. José Arthur Filho","Gab. Des. José de Carvalho Barbosa","Gab. Des. José Eustáquio Lucas Pereira",
+  "Gab. Des. José Luiz de Moura Faleiros","Gab. Des. Júlio César Lorens","Gab. Des. Júlio Cezar Guttierrez",
+  "Gab. Des. Leite Praça","Gab. Des. Leonardo de Faria Beraldo","Gab. Des. Leopoldo Mameluque",
+  "Gab. Des. Luiz Artur Hilário","Gab. Des. Luiz Carlos Gomes da Mata","Gab. Des. Luiz Gonzaga Silveira Soares",
+  "Gab. Des. Luís Carlos Gambogi","Gab. Des. Luís Eduardo Alves Pifano","Gab. Des. Lúcio de Brito",
+  "Gab. Des. Magid Nauef Láuar","Gab. Des. Manoel dos Reis Morais","Gab. Des. Marco Antônio de Melo",
+  "Gab. Des. Marco Aurelio Ferenzini","Gab. Des. Marcelo de Oliveira Milagres","Gab. Des. Marcelo Pereira da Silva",
+  "Gab. Des. Marcelo Rodrigues","Gab. Des. Márcio Idalmo Santos Miranda","Gab. Des. Marcos Flávio Lucas Padula",
+  "Gab. Des. Marcos Henrique Caldeira Brant","Gab. Des. Marcílio Eustáquio Santos",
+  "Gab. Des. Matheus Chaves Jardim","Gab. Des. Maurício Pinto Ferreira","Gab. Des. Maurício Soares",
+  "Gab. Des. Monteiro de Castro","Gab. Des. Nelson Missias de Morais","Gab. Des. Newton Teixeira Carvalho",
+  "Gab. Des. Nicolau Lupianhes Neto","Gab. Des. Octavio Augusto De Nigris Boccalini","Gab. Des. Octávio de Almeida Neves",
+  "Gab. Des. Oliveira Firmo","Gab. Des. Paulo Calmon Nogueira da Gama","Gab. Des. Paulo de Tarso Tamburini Souza",
+  "Gab. Des. Pedro Aleixo","Gab. Des. Pedro Bernardes de Oliveira","Gab. Des. Pedro Bitencourt Marcondes",
+  "Gab. Des. Peixoto Henriques","Gab. Des. Raimundo Messias Júnior","Gab. Des. Ramom Tácio",
+  "Gab. Des. Renato Dresch","Gab. Des. Rinaldo Kennedy Silva","Gab. Des. Roberto Apolinário de Castro",
+  "Gab. Des. Roberto Ribeiro de Paiva Júnior","Gab. Des. Roberto Vasconcellos","Gab. Des. Rui de Almeida Magalhães",
+  "Gab. Des. Sálvio Chaves","Gab. Des. Sérgio André da Fonseca Xavier","Gab. Des. Tiago Gomes de Carvalho Pinto",
+  "Gab. Des. Wagner Wilson","Gab. Des. Walner Barbosa Milward de Azevedo","Gab. Des. Wanderley Paiva",
+  "Gab. Des. Wilson Benevides","Gab. Des. Élito Almeida",
+  "Gab. Desa. Âmalin Aziz Sant'Ana","Gab. Desa. Ângela de Lourdes Rodrigues","Gab. Desa. Ana Paula Caixeta",
+  "Gab. Desa. Alice Birchal","Gab. Desa. Aparecida Grossi","Gab. Desa. Áurea Brasil",
+  "Gab. Desa. Beatriz Pinheiro Caires","Gab. Desa. Cláudia Maia","Gab. Desa. Daniela Villani Bonaccorsi",
+  "Gab. Desa. Eveline Félix","Gab. Desa. Fabiana da Cunha Pasqua","Gab. Desa. Ivone Guilarducci",
+  "Gab. Desa. Jaqueline Calábria Albuquerque","Gab. Desa. Juliana Campos Horta",
+  "Gab. Desa. Kárin Emmerich","Gab. Desa. Lílian Maciel","Gab. Desa. Luzia Divina de Paula Peixôto",
+  "Gab. Desa. Luziene Medeiros Barbosa Lima","Gab. Desa. Maria Cristina Cunha Carvalhais",
+  "Gab. Desa. Maria das Graças Rocha Santos","Gab. Desa. Maria Inês Souza","Gab. Desa. Maria Lúcia Cabral Caruso",
+  "Gab. Desa. Maria Luiza Santana Assunção","Gab. Desa. Mônica Aragão Martiniano",
+  "Gab. Desa. Mônica Libânio","Gab. Desa. Paula Cunha e Silva","Gab. Desa. Régia Ferreira de Lima",
+  "Gab. Desa. Sandra Fonseca","Gab. Desa. Shirley Fenzi Bertão","Gab. Desa. Valeria Rodrigues",
+  "Gab. Desa. Yeda Athias",
+  "Juiz Adilon Cláver de Resende","Juiz Christian Gomes de Lima","Juiz Clayton Rosa de Resende",
+  "Juiz Marcus Vinícius Mendes do Valle","Juiz Marcelo Paulo Salgado","Juiz Renan Chaves Carreira Machado",
+  "Juiz Sidnei Ponce","Juíza Maria Isabel Fleck",
+  "Outros",
+].sort()
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function getMonday(d:Date){const dt=new Date(d);const day=dt.getDay();dt.setDate(dt.getDate()-(day===0?6:day-1));dt.setHours(0,0,0,0);return dt}
 function getWeekDays(m:Date){return Array.from({length:5},(_,i)=>{const d=new Date(m);d.setDate(m.getDate()+i);return d})}
@@ -381,6 +444,7 @@ function AbaSessoes({canEdit,ferias}:{canEdit:boolean;ferias:Ferias[]}){
   // form
   const[nomeFiltro,setNomeFiltro]=useState('')
   const[nomeSessao,setNomeSessao]=useState('')
+  const[showSessaoDD,setShowSessaoDD]=useState(false)
   const[modalidade,setModalidade]=useState('PRESENCIAL')
   const[horario,setHorario]=useState('')
   const[plenario,setPlenario]=useState('')
@@ -411,7 +475,7 @@ function AbaSessoes({canEdit,ferias}:{canEdit:boolean;ferias:Ferias[]}){
     setConsultores(item?.consultores??[]); setModal({data,item})
   }
 
-  const catFiltrado=useMemo(()=>SESSOES_CATALOGO.filter(s=>s.toLowerCase().includes(nomeFiltro.toLowerCase())),[nomeFiltro])
+  const catFiltrado=useMemo(()=>nomeFiltro?SESSOES_CATALOGO.filter(s=>s.toLowerCase().includes(nomeFiltro.toLowerCase())):SESSOES_CATALOGO,[nomeFiltro])
 
   function selecionarCat(nome:string){
     setNomeSessao(nome); setNomeFiltro('')
@@ -583,11 +647,14 @@ function AbaSessoes({canEdit,ferias}:{canEdit:boolean;ferias:Ferias[]}){
               <input type="date" value={dataForm} onChange={e=>setDataForm(e.target.value)} className={inp}/>
 
               <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 mt-3">Sessão</label>
-              <input type="text" value={nomeFiltro||nomeSessao} onChange={e=>{setNomeFiltro(e.target.value);setNomeSessao(e.target.value)}} placeholder="Buscar ou digitar..." className={inp} autoFocus/>
-              {nomeFiltro&&catFiltrado.length>0&&(
-                <div className="border border-gray-200 rounded-xl overflow-hidden max-h-44 overflow-y-auto shadow-md mt-1">
+              <input type="text" value={nomeFiltro||(showSessaoDD?'':nomeSessao)}
+                onChange={e=>{setNomeFiltro(e.target.value);setNomeSessao(e.target.value);setShowSessaoDD(true)}}
+                onFocus={()=>setShowSessaoDD(true)}
+                placeholder={nomeSessao||"Selecionar ou digitar..."} className={inp} autoFocus/>
+              {showSessaoDD&&(
+                <div className="border border-gray-200 rounded-xl overflow-hidden max-h-48 overflow-y-auto shadow-md mt-1 z-10 relative bg-white">
                   {catFiltrado.map(s=>(
-                    <button key={s} onClick={()=>selecionarCat(s)} className="w-full text-left px-3 py-2 text-xs font-bold hover:bg-violet-50 hover:text-violet-700 border-b border-gray-50 last:border-0">
+                    <button key={s} onClick={()=>{selecionarCat(s);setShowSessaoDD(false)}} className="w-full text-left px-3 py-2 text-xs font-bold hover:bg-violet-50 hover:text-violet-700 border-b border-gray-50 last:border-0">
                       {s.startsWith('VIRTUAL')?'🖥️ ':'🏛️ '}{s}
                     </button>
                   ))}
@@ -665,9 +732,14 @@ function AbaAtividades({canEdit,ferias}:{canEdit:boolean;ferias:Ferias[]}){
   const[modal,setModal]=useState<{data:string;item?:AgendaAtividade}|null>(null)
   const[tipoFiltro,setTipoFiltro]=useState('')
   const[tipoSel,setTipoSel]=useState('')
+  const[showTipoDD,setShowTipoDD]=useState(false)
   const[tipoCustom,setTipoCustom]=useState('')
   const[observacao,setObservacao]=useState('')
   const[horarioAtv,setHorarioAtv]=useState('')
+  const[setor,setSetor]=useState('')
+  const[setorFiltro,setSetorFiltro]=useState('')
+  const[showSetorDD,setShowSetorDD]=useState(false)
+  const[setorManual,setSetorManual]=useState(false)
   const[consultores,setConsultores]=useState<string[]>([])
   const[dataForm,setDataForm]=useState('')
   const[salvando,setSalvando]=useState(false)
@@ -688,6 +760,7 @@ function AbaAtividades({canEdit,ferias}:{canEdit:boolean;ferias:Ferias[]}){
     setDataForm(item?.data??data); setTipoSel(item?.tipo??''); setTipoFiltro('')
     setTipoCustom(''); setObservacao(item?.observacao??'')
     setHorarioAtv((item as any)?.horario??'')
+    setSetor((item as any)?.setor??''); setSetorFiltro(''); setSetorManual(false)
     setConsultores(item?.consultores??[]); setModal({data,item})
   }
 
@@ -697,7 +770,7 @@ function AbaAtividades({canEdit,ferias}:{canEdit:boolean;ferias:Ferias[]}){
     if(!tipoFinal)return alert('Informe o tipo de atividade!')
     setSalvando(true)
     const existe=itens.find(i=>i.data===dataForm&&i.tipo===tipoFinal)
-    const payload={data:dataForm,tipo:tipoFinal,observacao:observacao.trim()||undefined,horario:horarioAtv||undefined,consultores,criado_por:meuLogin||'',criado_em:new Date().toISOString()}
+    const payload={data:dataForm,tipo:tipoFinal,observacao:observacao.trim()||undefined,horario:horarioAtv||undefined,setor:setor||undefined,consultores,criado_por:meuLogin||'',criado_em:new Date().toISOString()}
     if(modal?.item){await supabase.from('agenda_atividades').update(payload).eq('id',modal.item.id)}
     else if(existe){await supabase.from('agenda_atividades').update(payload).eq('id',existe.id)}
     else{await supabase.from('agenda_atividades').insert(payload)}
@@ -743,7 +816,7 @@ function AbaAtividades({canEdit,ferias}:{canEdit:boolean;ferias:Ferias[]}){
     return map
   },[itens,weekDays,filtro])
 
-  const tiposFiltrados=TIPOS_ATIVIDADE_PADRAO.filter(t=>t.toLowerCase().includes(tipoFiltro.toLowerCase()))
+  const tiposFiltrados=tipoFiltro?TIPOS_ATIVIDADE_PADRAO.filter(t=>t.toLowerCase().includes(tipoFiltro.toLowerCase())):TIPOS_ATIVIDADE_PADRAO
   const inp="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-400 bg-white"
 
   return(
@@ -797,6 +870,7 @@ function AbaAtividades({canEdit,ferias}:{canEdit:boolean;ferias:Ferias[]}){
                         </div>
                           {canEdit&&<button onClick={e=>{e.stopPropagation();handleDeletar(a.id)}} className="w-4 h-4 rounded text-[9px] text-red-400 hover:text-red-600 flex items-center justify-center">✕</button>}
                         </div>
+                        {(a as any).setor&&<p className="text-[10px] font-bold text-indigo-600 mt-0.5">📍 {(a as any).setor}</p>}
                         {a.observacao&&<p className="text-[10px] text-gray-500 mt-1 italic">{a.observacao}</p>}
                         <div className="flex flex-wrap gap-0.5 mt-1">{a.consultores.map(c=><ChipConsultor key={c} nome={c}/>)}</div>
                       </div>
@@ -821,13 +895,14 @@ function AbaAtividades({canEdit,ferias}:{canEdit:boolean;ferias:Ferias[]}){
               <input type="date" value={dataForm} onChange={e=>setDataForm(e.target.value)} className={inp}/>
 
               <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 mt-3">Tipo de atividade</label>
-              <input type="text" value={tipoFiltro||tipoSel} onChange={e=>{setTipoFiltro(e.target.value);setTipoSel(e.target.value);setTipoCustom('')}}
-                placeholder="Buscar ou digitar..." className={inp} autoFocus/>
-              {tipoFiltro&&tiposFiltrados.length>0&&(
-                <div className="border border-gray-200 rounded-xl overflow-hidden max-h-40 overflow-y-auto shadow-md mt-1">
+              <input type="text" value={tipoFiltro||(showTipoDD?'':tipoSel)}
+                onChange={e=>{setTipoFiltro(e.target.value);setTipoSel(e.target.value);setTipoCustom('');setShowTipoDD(true)}}
+                placeholder={tipoSel||"Selecionar ou digitar..."} className={inp} autoFocus/>
+              {showTipoDD&&(
+                <div className="border border-gray-200 rounded-xl overflow-hidden max-h-48 overflow-y-auto shadow-md mt-1 z-10 relative bg-white">
                   {tiposFiltrados.map(t=>{
                     const cfg=getCfgAtv(t)
-                    return <button key={t} onClick={()=>{setTipoSel(t);setTipoFiltro('');setTipoCustom('')}}
+                    return <button key={t} onClick={()=>{setTipoSel(t);setTipoFiltro('');setTipoCustom('');setShowTipoDD(false)}}
                       className="w-full text-left px-3 py-2 text-xs font-bold hover:bg-blue-50 hover:text-blue-700 border-b border-gray-50 last:border-0 flex items-center gap-2">
                       {cfg.icon} {t}
                     </button>
@@ -847,6 +922,41 @@ function AbaAtividades({canEdit,ferias}:{canEdit:boolean;ferias:Ferias[]}){
 
               <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 mt-3">Horário (opcional)</label>
               <input type="time" value={horarioAtv} onChange={e=>setHorarioAtv(e.target.value)} className={inp}/>
+              <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 mt-3">Cartório / Gabinete (opcional)</label>
+              {!setorManual?(
+                <>
+                  <div className="flex gap-1 mb-1">
+                    <input type="text" value={setorFiltro}
+                      onChange={e=>{setSetorFiltro(e.target.value);setShowSetorDD(true)}}
+                      onFocus={()=>setShowSetorDD(true)}
+                      className={inp+' flex-1 !mb-0'} placeholder={setor||"Selecionar cartório ou gabinete..."}/>
+                    {setor&&<button onClick={()=>{setSetor('');setSetorFiltro('');setShowSetorDD(false)}}
+                      className="text-gray-400 hover:text-red-500 px-2 text-sm font-bold flex-shrink-0">✕</button>}
+                  </div>
+                  {setor&&!showSetorDD&&<p className="text-[10px] text-blue-600 font-bold mb-1">📍 {setor}</p>}
+                  {showSetorDD&&(
+                    <div className="border border-gray-200 rounded-xl overflow-hidden max-h-36 overflow-y-auto shadow-md mb-1 z-10 relative bg-white">
+                      {(setorFiltro?GABINETES_2GRAU.filter(g=>g.toLowerCase().includes(setorFiltro.toLowerCase())):GABINETES_2GRAU).slice(0,20).map(g=>(
+                        <button key={g} onClick={()=>{setSetor(g);setSetorFiltro('');setShowSetorDD(false)}}
+                          className="w-full text-left px-3 py-1.5 text-xs font-bold hover:bg-blue-50 hover:text-blue-700 border-b border-gray-50 last:border-0">{g}</button>
+                      ))}
+                    </div>
+                  )}
+                  <button onClick={()=>{setSetorManual(true);setSetor('');setSetorFiltro('');setShowSetorDD(false)}}
+                    className="text-[10px] text-blue-600 font-bold mb-2 block hover:underline">+ Digitar manualmente</button>
+                </>
+              ):(
+                <>
+                  <div className="flex gap-1 mb-1">
+                    <input type="text" value={setor} onChange={e=>setSetor(e.target.value)}
+                      className={inp+' flex-1 !mb-0'} placeholder="Digite o nome do local..." autoFocus/>
+                    {setor&&<button onClick={()=>setSetor('')}
+                      className="text-gray-400 hover:text-red-500 px-2 text-sm font-bold flex-shrink-0">✕</button>}
+                  </div>
+                  <button onClick={()=>{setSetorManual(false);setSetor('');setSetorFiltro('')}}
+                    className="text-[10px] text-gray-400 font-bold mb-2 block hover:underline">← Voltar para lista</button>
+                </>
+              )}
               <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 mt-3">Observação</label>
               <textarea value={observacao} onChange={e=>setObservacao(e.target.value)} rows={2}
                 className={`${inp} resize-none`} placeholder="Detalhes..."/>
@@ -1173,7 +1283,8 @@ function AbaTreinamentosExternos({canEdit,meuLogin,ferias}:{canEdit:boolean;meuL
   const[itens,setItens]=useState<TreinamentoExterno[]>([])
   const[loading,setLoading]=useState(true)
   const[modal,setModal]=useState<TreinamentoExterno|'new'|null>(null)
-  const[form,setForm]=useState({data:'',tipo:'EPROC',tipoCustom:'',local_nome:'',local_tipo:'',localFiltro:'',consultores:[] as string[],observacao:'',horario:''})
+  const[form,setForm]=useState({data:'',tipo:'EPROC',tipoCustom:'',local_nome:'',local_tipo:'',localFiltro:'',localManual:false,consultores:[] as string[],observacao:'',horario:''})
+  const[showLocalDD,setShowLocalDD]=useState(false)
   const[salvando,setSalvando]=useState(false)
   const[filtroTipo,setFiltroTipo]=useState('Todos')
 
@@ -1187,7 +1298,7 @@ function AbaTreinamentosExternos({canEdit,meuLogin,ferias}:{canEdit:boolean;meuL
 
   const tipoFinal=form.tipoCustom.trim()||form.tipo
   const bloqueados=useConsultoresDisponiveis(form.data,ferias)
-  const locaisFiltrados=useMemo(()=>LOCAIS_TREINAMENTO.filter(l=>l.nome.toLowerCase().includes(form.localFiltro.toLowerCase())),[form.localFiltro])
+  const locaisFiltrados=useMemo(()=>GABINETES_2GRAU.filter(g=>g.toLowerCase().includes(form.localFiltro.toLowerCase())),[form.localFiltro])
 
   async function handleSalvar(){
     if(!form.data||!form.local_nome)return alert('Preencha data e local!')
@@ -1216,7 +1327,7 @@ function AbaTreinamentosExternos({canEdit,meuLogin,ferias}:{canEdit:boolean;meuL
             ))}
           </div>
         </div>
-        {canEdit&&<button onClick={()=>{setModal('new');setForm({data:'',tipo:'EPROC',tipoCustom:'',local_nome:'',local_tipo:'',localFiltro:'',consultores:[],observacao:'',horario:''})}}
+        {canEdit&&<button onClick={()=>{setModal('new');setForm({data:'',tipo:'EPROC',tipoCustom:'',local_nome:'',local_tipo:'',localFiltro:'',localManual:false,consultores:[],observacao:'',horario:''});setShowLocalDD(false)}}
           className="bg-green-600 hover:bg-green-700 text-white font-bold px-4 py-2 rounded-xl text-sm">+ Treinamento</button>}
       </div>
       {loading?<div className="flex justify-center py-8"><div className="w-7 h-7 border-4 border-green-400 border-t-transparent rounded-full animate-spin"/></div>
@@ -1246,7 +1357,7 @@ function AbaTreinamentosExternos({canEdit,meuLogin,ferias}:{canEdit:boolean;meuL
                   </div>
                 </div>
                 {canEdit&&<div className="flex gap-1 flex-shrink-0">
-                  <button onClick={()=>{setModal(it);setForm({data:it.data,tipo:it.tipo,tipoCustom:'',local_nome:it.local_nome,local_tipo:it.local_tipo||'',localFiltro:'',consultores:it.consultores||[],observacao:it.observacao||'',horario:(it as any).horario||''})}} className="text-xs text-gray-400 hover:text-blue-500 p-1">✏️</button>
+                  <button onClick={()=>{setModal(it);setForm({data:it.data,tipo:it.tipo,tipoCustom:'',local_nome:it.local_nome,local_tipo:it.local_tipo||'',localFiltro:'',localManual:false,consultores:it.consultores||[],observacao:it.observacao||'',horario:(it as any).horario||''});setShowLocalDD(false)}} className="text-xs text-gray-400 hover:text-blue-500 p-1">✏️</button>
                   <button onClick={()=>handleDeletar(it.id)} className="text-xs text-gray-400 hover:text-red-500 p-1">✕</button>
                 </div>}
               </div>
@@ -1278,20 +1389,32 @@ function AbaTreinamentosExternos({canEdit,meuLogin,ferias}:{canEdit:boolean;meuL
               </div>
             </div>
 
-            <label className="block text-xs font-black text-gray-400 uppercase mb-1">Local / Vara / Gabinete *</label>
-            <input type="text" value={form.localFiltro||form.local_nome}
-              onChange={e=>setForm(f=>({...f,localFiltro:e.target.value,local_nome:e.target.value,local_tipo:''}))}
-              className={inp+' mb-1'} placeholder="Buscar vara ou gabinete..."/>
-            {form.localFiltro&&locaisFiltrados.length>0&&(
-              <div className="border border-gray-200 rounded-xl overflow-hidden max-h-44 overflow-y-auto shadow-md mb-3">
-                {locaisFiltrados.slice(0,20).map(l=>(
-                  <button key={l.nome} onClick={()=>setForm(f=>({...f,local_nome:l.nome,local_tipo:l.tipo,localFiltro:''}))}
-                    className="w-full text-left px-3 py-2 text-xs font-bold hover:bg-green-50 hover:text-green-700 border-b border-gray-50 last:border-0">
-                    <span className="font-black">{l.nome}</span>
-                    <span className="text-gray-400 ml-2">({l.tipo})</span>
-                  </button>
-                ))}
-              </div>
+            <label className="block text-xs font-black text-gray-400 uppercase mb-1">Cartório / Gabinete *</label>
+            {!form.localManual?(
+              <>
+                <input type="text" value={form.localFiltro||(showLocalDD?'':form.local_nome)}
+                  onChange={e=>setForm(f=>({...f,localFiltro:e.target.value,local_nome:e.target.value,local_tipo:''}))}
+                  onFocus={()=>setShowLocalDD(true)}
+                  className={inp+' mb-1'} placeholder={form.local_nome||"Selecionar cartório ou gabinete..."}/>
+                {showLocalDD&&(
+                  <div className="border border-gray-200 rounded-xl overflow-hidden max-h-44 overflow-y-auto shadow-md mb-1 z-10 relative bg-white">
+                    {locaisFiltrados.slice(0,25).map(g=>(
+                      <button key={g} onClick={()=>{setForm(f=>({...f,local_nome:g,local_tipo:'',localFiltro:''}));setShowLocalDD(false)}}
+                        className="w-full text-left px-3 py-2 text-xs font-bold hover:bg-green-50 hover:text-green-700 border-b border-gray-50 last:border-0">{g}</button>
+                    ))}
+                  </div>
+                )}
+                <button onClick={()=>setForm(f=>({...f,localManual:true,local_nome:'',localFiltro:''}))}
+                  className="text-[10px] text-green-600 font-bold mb-3 block hover:underline">+ Digitar manualmente</button>
+              </>
+            ):(
+              <>
+                <input type="text" value={form.local_nome}
+                  onChange={e=>setForm(f=>({...f,local_nome:e.target.value}))}
+                  className={inp+' mb-1'} placeholder="Digite o nome do local..." autoFocus/>
+                <button onClick={()=>setForm(f=>({...f,localManual:false,local_nome:'',localFiltro:''}))}
+                  className="text-[10px] text-gray-400 font-bold mb-3 block hover:underline">← Voltar para lista</button>
+              </>
             )}
 
             <label className="block text-xs font-black text-gray-400 uppercase mb-1">Horário (opcional)</label>
