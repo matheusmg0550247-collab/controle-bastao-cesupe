@@ -1,8 +1,8 @@
 export const EQUIPE_EPROC = [
-  "Barbara Mara", "Bruno Glaicon", "Claudia Luiza", "Douglas Paiva", "Fábio Alves",
+  "Barbara Mara", "Bruno Glaicon", "Douglas Paiva", "Fábio Alves",
   "Glayce Torres", "Isabela Dias", "Isac Candido", "Ivana Guimarães", "Jonatas", "Leonardo Damaceno",
   "Marcelo Pena Guerra", "Michael Douglas", "Morôni", "Pablo Mol", "Ranyer Segal",
-  "Sarah Leal", "Victoria Lisboa"
+  "Larissa", "Sarah Leal", "Victoria Lisboa"
 ].sort();
 
 export const EQUIPE_JPE = [
@@ -48,7 +48,6 @@ export const USUARIOS_SISTEMA: UsuarioSistema[] = [
   { nome: 'Juliana', perfil: 'Gestor', equipe: 'Projetos' },
   // Secretaria Cesupe
   { nome: 'Brenda', perfil: 'Secretaria', equipe: 'Secretaria' },
-  { nome: 'Larissa', perfil: 'Secretaria', equipe: 'Secretaria' },
   { nome: 'Lívia', perfil: 'Secretaria', equipe: 'Secretaria' },
   // Consultores EPROC
   ...EQUIPE_EPROC.map(nome => ({ nome, perfil: 'Consultor' as const, equipe: 'Eproc' as const })),

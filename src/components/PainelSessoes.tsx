@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useBastaoStore } from '../store/useBastaoStore'
+import { USUARIOS_SISTEMA, getRamal, EQUIPE_EPROC, EQUIPE_JPE } from '../constants'
 
 // Retorna primeiro + último nome para diferenciar consultores com mesmo primeiro nome
 function nomeExibicao(nome: string): string {
@@ -215,7 +216,7 @@ export function PainelSessoes() {
   const [atvsEquipe,     setAtvsEquipe]     = useState<AgendaAtividade[]>([])
   const [loading,        setLoading]        = useState(true)
   const [semanaOffset,   setSemanaOffset]   = useState(0)
-  const [abaAtiva,       setAbaAtiva]       = useState<'sessoes'|'plantoes'|'atividades'>('sessoes')
+  const [abaAtiva,       setAbaAtiva]       = useState<'sessoes'|'plantoes'|'atividades'|'equipe'>('sessoes')
   const [filtroConsultor,setFiltroConsultor]= useState('')
   const [filtroAtividade,setFiltroAtividade]= useState('')
   const meuLogin = useBastaoStore(s => s.meuLogin)
@@ -305,7 +306,7 @@ export function PainelSessoes() {
       {/* Header clicável */}
       <button onClick={()=>setAberto(!aberto)}
         className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
-        <h2 className="text-xl font-bold text-gray-800">📅 Sessões & Plantões & Atividades</h2>
+        <h2 className="text-xl font-bold text-gray-800">👥 Painel Equipe</h2>
         <div className="flex items-center gap-3">
           {!aberto && <span className="text-xs text-gray-400 font-bold">Clique para expandir</span>}
           <span className={`text-xl transition-transform duration-300 ${aberto?'rotate-180':''}`}>▼</span>
@@ -327,6 +328,10 @@ export function PainelSessoes() {
             <button onClick={()=>setAbaAtiva('atividades')}
               className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${abaAtiva==='atividades'?'bg-blue-600 text-white shadow-md':'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
               📋 Atividades
+            </button>
+            <button onClick={()=>setAbaAtiva('equipe')}
+              className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${abaAtiva==='equipe'?'bg-indigo-600 text-white shadow-md':'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              👥 Equipe & Setor
             </button>
           </div>
 
@@ -518,6 +523,78 @@ export function PainelSessoes() {
                   </div>
               }
             </>
+          )}
+
+          {/* ── ABA EQUIPE & SETOR ────────────────────────────────────────── */}
+          {abaAtiva === 'equipe' && (
+            <div>
+              <h3 className="text-lg font-black text-gray-800 mb-4">👥 Informações da Equipe</h3>
+
+              {/* EPROC */}
+              <div className="mb-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="w-3 h-3 rounded-full bg-green-500 inline-block"></span>
+                  <h4 className="text-sm font-black text-green-700 uppercase tracking-wide">Equipe EPROC</h4>
+                  <span className="text-xs font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-full border border-green-200">
+                    {EQUIPE_EPROC.length} consultores
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                  {EQUIPE_EPROC.sort().map(nome => (
+                    <div key={nome} className="bg-green-50 border-2 border-green-200 rounded-2xl p-3 flex flex-col gap-1.5">
+                      <p className="text-sm font-black text-green-900 leading-tight">{nome}</p>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-black bg-green-200 text-green-800 px-1.5 py-0.5 rounded-full">EPROC</span>
+                        <span className="text-[10px] text-green-600 font-bold">☎ {getRamal(nome)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* JPE / Themis */}
+              <div className="mb-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="w-3 h-3 rounded-full bg-red-500 inline-block"></span>
+                  <h4 className="text-sm font-black text-red-700 uppercase tracking-wide">Equipe JPE / Themis</h4>
+                  <span className="text-xs font-bold text-red-600 bg-red-100 px-2 py-0.5 rounded-full border border-red-200">
+                    {EQUIPE_JPE.length} consultores
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                  {EQUIPE_JPE.sort().map(nome => (
+                    <div key={nome} className="bg-red-50 border-2 border-red-200 rounded-2xl p-3 flex flex-col gap-1.5">
+                      <p className="text-sm font-black text-red-900 leading-tight">{nome}</p>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-black bg-red-200 text-red-800 px-1.5 py-0.5 rounded-full">JPE/Themis</span>
+                        <span className="text-[10px] text-red-600 font-bold">☎ {getRamal(nome)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Gestão e Secretaria */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="w-3 h-3 rounded-full bg-indigo-500 inline-block"></span>
+                  <h4 className="text-sm font-black text-indigo-700 uppercase tracking-wide">Gestão & Secretaria</h4>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                  {USUARIOS_SISTEMA.filter(u => u.perfil === 'Gestor' || u.perfil === 'Secretaria').map(u => (
+                    <div key={u.nome} className="bg-indigo-50 border-2 border-indigo-200 rounded-2xl p-3 flex flex-col gap-1.5">
+                      <p className="text-sm font-black text-indigo-900 leading-tight">{u.nome}</p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${u.perfil==='Gestor'?'bg-indigo-200 text-indigo-800':'bg-purple-200 text-purple-800'}`}>
+                          {u.perfil}
+                        </span>
+                        <span className="text-[10px] text-indigo-600 font-bold">☎ {getRamal(u.nome)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           )}
         </div>
       )}

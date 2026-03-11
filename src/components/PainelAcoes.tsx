@@ -4,7 +4,7 @@ import { getEquipe, USUARIOS_SISTEMA } from '../constants'
 import { supabase } from '../lib/supabase'
 
 const USUARIO_OPTIONS  = ["Cartório", "Gabinete", "Público Externo", "Interno", "Outros"]
-const SISTEMA_OPTIONS  = ["Eproc", "JPE", "PJe", "SEI", "Conveniados", "Outros"]
+const SISTEMA_OPTIONS  = ["Eproc", "JPE", "PJe", "SEI", "Themis", "Conveniados", "Outros"]
 const CANAL_OPTIONS    = ["Whatsapp", "Telefone", "Presencial", "E-mail", "Outros"]
 const DESFECHO_OPTIONS = ["Resolvido - Cesupe", "Encaminhado N2", "Encaminhado N3", "Aguardando Usuário", "Outros"]
 
@@ -120,6 +120,24 @@ export function PainelAcoes() {
     setModalAberto(false); setModalAlvo('')
   }
 
+  const handlePularComModal = () => {
+    if (!alvoSelecionado) return alert('Selecione alguém primeiro!')
+    if (!isSecretaria && meuLogin !== alvoSelecionado) {
+      if (!window.confirm(`⚠️ AUDITORIA\n\nVocê está pulando a vez de ${alvoSelecionado}.\nRegistrado em seu nome (${meuLogin}).\n\nContinuar?`)) return
+    }
+    const equipe = getEquipe(alvoSelecionado) as "EPROC" | "JPE"
+    if (!equipe) return
+    // Pula a vez na fila
+    toggleSkip(alvoSelecionado)
+    // Abre o modal de atendimento igual ao passar bastão (sem rotacaoId)
+    setModalAtendimentoPos({
+      equipe,
+      quemPassou: alvoSelecionado,
+      quemRecebeu: '',
+      rotacaoId: null,
+    })
+  }
+
   const handlePassarAuditado = () => {
     if (!alvoSelecionado) return alert('Selecione alguém primeiro!')
     const equipe = getEquipe(alvoSelecionado) as "EPROC" | "JPE"; if (!equipe) return
@@ -152,7 +170,7 @@ export function PainelAcoes() {
         <button onClick={() => handleAcaoAuditada(() => toggleTelefone(alvoSelecionado!), 'Telefone')} className="bg-gray-100 hover:bg-gray-200 py-3 rounded-xl shadow-sm active:scale-95 transition-all text-xl">📞</button>
         <button onClick={() => handleAcaoAuditada(() => toggleCafe(alvoSelecionado!), 'Café')} className="bg-gray-100 hover:bg-gray-200 py-3 rounded-xl shadow-sm active:scale-95 transition-all text-xl">☕</button>
         <button onClick={handlePassarAuditado} className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-2 rounded-xl shadow-sm active:scale-95 transition-all text-sm flex items-center justify-center gap-1">🏆 Passar Bastão</button>
-        <button onClick={() => handleAcaoAuditada(() => toggleSkip(alvoSelecionado!), 'Pular Vez')} className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-2 rounded-xl shadow-sm active:scale-95 transition-all text-sm flex items-center justify-center gap-1">⏩ Pular</button>
+        <button onClick={handlePularComModal} className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-2 rounded-xl shadow-sm active:scale-95 transition-all text-sm flex items-center justify-center gap-1">⏩ Pular</button>
       </div>
 
       {/* ── Modal: Voltar ao Bastão ou Ficar Indisponível ── */}
@@ -180,11 +198,14 @@ export function PainelAcoes() {
               <div className="flex items-center gap-3">
                 <span className="text-3xl">🏆</span>
                 <div>
-                  <h3 className="text-lg font-black">Bastão passado!</h3>
+                  <h3 className="text-lg font-black">
+                    {modalAtendimentoPos.quemRecebeu ? 'Bastão passado!' : 'Vez pulada!'}
+                  </h3>
                   <p className="text-sm text-white/80">
                     <span className="font-bold">{modalAtendimentoPos.quemPassou}</span>
-                    {' '}→{' '}
-                    <span className="font-bold">{modalAtendimentoPos.quemRecebeu}</span>
+                    {modalAtendimentoPos.quemRecebeu && (
+                      <>{' '}→{' '}<span className="font-bold">{modalAtendimentoPos.quemRecebeu}</span></>
+                    )}
                     {' '}({modalAtendimentoPos.equipe})
                   </p>
                 </div>

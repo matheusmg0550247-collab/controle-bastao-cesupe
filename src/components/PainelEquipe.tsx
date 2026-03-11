@@ -52,11 +52,17 @@ export function PainelEquipe() {
     const naFila = filaEproc.includes(nome) || filaJpe.includes(nome)
     if (naFila) return acc
     let statusAtual = statusTexto[nome] && statusTexto[nome] !== '' ? statusTexto[nome] : 'Indisponível'
-    if (statusAtual === 'Com o Bastão') statusAtual = 'Indisponível'
+    // Normaliza variações de Indisponível para um único grupo
+    if (statusAtual === 'Com o Bastão' ||
+        statusAtual === 'Indisponivel' ||
+        statusAtual === 'Indisponível') statusAtual = 'Indisponível'
     if (!acc[statusAtual]) acc[statusAtual] = []
     acc[statusAtual].push(nome)
     return acc
   }, {} as Record<string, string[]>)
+
+  // Ordena consultores dentro de cada grupo alfabeticamente
+  Object.keys(agrupado).forEach(k => agrupado[k].sort())
 
   useEffect(() => {
     if (statusAberto && !agrupado[statusAberto]) setStatusAberto(null)

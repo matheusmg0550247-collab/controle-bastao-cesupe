@@ -10,11 +10,10 @@ import { PainelEquipe } from './components/PainelEquipe'
 import { PainelGerencial } from './components/PainelGerencial'
 import { PainelAtividades, PainelAnalytics } from './components/PainelAtividades'
 import { PainelSessoes } from './components/PainelSessoes'
+import { PainelEquipeCompleto } from './components/PainelEquipeCompleto'
 import { LojinhaVirtual } from './components/LojinhaVirtual'
 import { LojinhaRashid } from './components/LojinhaRashid'
 import { TriagemBastao } from './components/TriagemBastao'
-import { PainelGestaoSessoes } from './components/PainelGestaoSessoes'
-import { PainelGestaoAtividades } from './components/PainelGestaoAtividades'
 import { Login } from './components/Login'
 import { BannerAnomalia, BotaoAnomalia } from './components/BotaoAnomalia'
 import { BadgePendencias } from './components/BadgePendencias'
@@ -59,7 +58,6 @@ function App() {
 
   const usuarioLogado = USUARIOS_SISTEMA.find(u => u.nome === meuLogin)
   const isGestor = usuarioLogado?.perfil === 'Gestor'
-  const isBrendaOuFarley = meuLogin === 'Brenda' || meuLogin === 'Farley'
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-800">
@@ -117,12 +115,10 @@ function App() {
                 <BotaoCarometro />
                 <PainelFerramentas />
                 <TriagemBastao />
-                {isBrendaOuFarley && <PainelGestaoSessoes />}
-                {isBrendaOuFarley && <PainelGestaoAtividades />}
                 <PainelMural />
               </div>
             </div>
-            <PainelSessoes />
+            <PainelEquipeCompleto />
             <LojinhaVirtual />
             <LojinhaRashid />
             <PainelAtividades inline={true} />
@@ -141,8 +137,6 @@ function App() {
                 <BotaoCarometro />
                 <PainelFerramentas />
                 <TriagemBastao />
-                {isBrendaOuFarley && <PainelGestaoSessoes />}
-                {isBrendaOuFarley && <PainelGestaoAtividades />}
               </div>
               <div className="flex flex-col gap-6">
                 <PainelAcoes />
@@ -150,7 +144,7 @@ function App() {
                 <PainelMural />
               </div>
             </div>
-            <PainelSessoes />
+            <PainelEquipeCompleto />
             <LojinhaVirtual />
             <LojinhaRashid />
             {/* ── Análise Cesupe — menu suspenso ── */}
