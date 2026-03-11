@@ -899,7 +899,7 @@ function AbaAtividades({canEdit,ferias}:{canEdit:boolean;ferias:Ferias[]}){
     if(!tipoFinal)return alert('Informe o tipo de atividade!')
     setSalvando(true)
     const existe=itens.find(i=>i.data===dataForm&&i.tipo===tipoFinal)
-    const payload={data:dataForm,tipo:tipoFinal,observacao:observacao.trim()||undefined,horario:horarioAtv||undefined,setor:setor||undefined,consultores,criado_por:meuLogin||'',criado_em:new Date().toISOString()}
+    const payload={data:dataForm,tipo:tipoFinal,observacao:observacao.trim()||undefined,horario:horarioAtv||undefined,setor:setor||undefined,consultores,criado_por:meuLogin||''}
     let errAtv:any=null
     if(modal?.item){({error:errAtv}=await supabase.from('agenda_atividades').update(payload).eq('id',modal.item.id))}
     else if(existe){({error:errAtv}=await supabase.from('agenda_atividades').update(payload).eq('id',existe.id))}
