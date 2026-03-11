@@ -2,14 +2,14 @@ export const EQUIPE_EPROC = [
   "Barbara Mara", "Bruno Glaicon", "Douglas Paiva", "Fábio Alves",
   "Glayce Torres", "Isabela Dias", "Isac Candido", "Ivana Guimarães", "Jonatas", "Leonardo Damaceno",
   "Marcelo Pena Guerra", "Michael Douglas", "Morôni", "Pablo Mol", "Ranyer Segal",
-  "Larissa", "Sarah Leal", "Victoria Lisboa"
+  "Sarah Leal", "Victoria Lisboa"
 ].sort();
 
 export const EQUIPE_JPE = [
   "Alex Paulo", "Dirceu Gonçalves", "Douglas De Souza", "Farley", "Gleis",
   "Hugo Leonardo", "Igor Dayrell", "Jerry Marcos", "Leandro",
   "Luiz Henrique", "Marcelo dos Santos Dutra", "Marina Marques",
-  "Marina Amaral", "Vanessa Ligiane"
+  "Larissa", "Marina Amaral", "Vanessa Ligiane"
 ].sort();
 
 export const TODOS_CONSULTORES = [...EQUIPE_EPROC, ...EQUIPE_JPE].sort();
@@ -18,7 +18,7 @@ export const TODOS_CONSULTORES = [...EQUIPE_EPROC, ...EQUIPE_JPE].sort();
 export const TRIAGEM_HP = ["Pablo Mol", "Leandro"];
 
 export const RAMAIS: Record<string, string> = {
-  "Alex": "2650", "Barbara": "4201", "Bruno": "2644", "Claudia": "2667",
+  "Alex": "2650", "Barbara": "4201", "Bruno": "2644",
   "Dirceu": "2666", "Douglas": "4210", "Douglas Paiva": "2663", "Fabio": "2665", "Fábio": "2665",
   "Farley": "2651", "Gilberto": "2645", "Gleis": "4212", "Gleyce": "2647", "Glayce": "2647",
   "Hugo": "4207", "Igor": "4203", "Isabela": "4205", "Isac": "2517",

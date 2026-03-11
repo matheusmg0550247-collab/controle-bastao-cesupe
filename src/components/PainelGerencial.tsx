@@ -1417,6 +1417,248 @@ function AbaHorasExtras() {
 }
 
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ABA AUDITORIA TEMPO REAL
+// ─────────────────────────────────────────────────────────────────────────────
+interface RegistroRT { consultor:string; status:string; inicio:string; fim:string|null; duracao_min:number|null }
+type NivelAlerta = 'ok'|'amarelo'|'vermelho'
+interface Alerta { msg:string; nivel:NivelAlerta }
+
+function durAtual(inicio:string, fim:string|null, dur:number|null):number {
+  if(dur!=null) return dur
+  if(fim) return Math.max(0,Math.round((new Date(fim).getTime()-new Date(inicio).getTime())/60000))
+  return Math.max(0,Math.round((Date.now()-new Date(inicio).getTime())/60000))
+}
+function fmtRT(m:number):string {
+  if(!m||m<=0)return '0m'
+  const h=Math.floor(m/60),r=m%60
+  return h>0?`${h}h ${r}m`:`${r}m`
+}
+
+const COR_STATUS:Record<string,string>={
+  'Bastão':'#ef4444','Reunião':'#14b8a6','Treinamento':'#8b5cf6',
+  'Sessão':'#f43f5e','Atend. Presencial':'#f97316','Projeto':'#6366f1',
+  'Atividades':'#3b82f6','Almoço':'#f59e0b','Indisponível':'#9ca3af','Indisponivel':'#9ca3af',
+}
+
+function AbaAuditoriaTempoReal() {
+  const [registros, setRegistros] = useState<RegistroRT[]>([])
+  const [ultimaRotacao, setUltimaRotacao] = useState<Record<string,string>>({})
+  const [loading, setLoading] = useState(true)
+  const [tick, setTick] = useState(Date.now())
+  const [expandido, setExpandido] = useState<string|null>(null)
+  const consultores = USUARIOS_SISTEMA.filter(u=>u.perfil==='Consultor').map(u=>u.nome)
+  const { filaEproc, filaJpe } = useBastaoStore()
+  const naFila = new Set([...filaEproc, ...filaJpe])
+
+  useEffect(()=>{ const t=setInterval(()=>setTick(Date.now()),30000); return()=>clearInterval(t) },[])
+  useEffect(()=>{ load(); const t=setInterval(load,120000); return()=>clearInterval(t) },[])
+
+  async function load() {
+    setLoading(true)
+    const [regRes, rotRes] = await Promise.all([
+      supabase.from('registros_status').select('consultor,status,inicio,fim,duracao_min').eq('data',hoje()).order('inicio',{ascending:true}),
+      supabase.from('bastao_rotacoes').select('para_consultor,data_hora').gte('data_hora',hoje()+'T00:00:00').order('data_hora',{ascending:false}).limit(200),
+    ])
+    setRegistros(regRes.data||[])
+    // Pega última vez que cada consultor recebeu o bastão
+    const rot:Record<string,string>={}
+    for(const r of (rotRes.data||[])){
+      if(!rot[r.para_consultor]) rot[r.para_consultor]=r.data_hora
+    }
+    setUltimaRotacao(rot)
+    setLoading(false)
+  }
+
+  const porConsultor = consultores.map(nome=>{
+    const regs=registros.filter(r=>r.consultor===nome)
+    const aberto=regs.find(r=>!r.fim)
+    const totalMin=regs.reduce((s,r)=>s+durAtual(r.inicio,r.fim,r.duracao_min),0)
+
+    // Tempo por status ('' ou 'Bastão' → Bastão)
+    const tempoStatus:Record<string,number>={}
+    for(const r of regs){
+      const s=(!r.status||r.status==='')?'Bastão':r.status
+      tempoStatus[s]=(tempoStatus[s]||0)+durAtual(r.inicio,r.fim,r.duracao_min)
+    }
+    const tempoBastaoRegistrado=tempoStatus['Bastão']||0
+
+    // Status atual
+    const statusAtual=aberto?(aberto.status||'Bastão'):(regs.length>0?(regs[regs.length-1].status||'Bastão'):null)
+    const duracaoStatusAtual=aberto?durAtual(aberto.inicio,null,null):0
+
+    // Tempo no bastão agora: prioriza registro aberto de Bastão; fallback = última rotação
+    let tempoBastaoAgora=0
+    if(aberto&&(!aberto.status||aberto.status==='Bastão')){
+      tempoBastaoAgora=durAtual(aberto.inicio,null,null)
+    } else if(naFila.has(nome)&&ultimaRotacao[nome]){
+      tempoBastaoAgora=Math.max(0,Math.round((Date.now()-new Date(ultimaRotacao[nome]).getTime())/60000))
+    }
+
+    // ── ALERTAS ──────────────────────────────────────────────────────────────
+    const alertas:Alerta[]=[]
+    const estaTrabalhandoAgora=naFila.has(nome)||(aberto&&(!aberto.status||aberto.status==='Bastão'))
+
+    // 1. Sem registro e não está na fila
+    if(regs.length===0&&!naFila.has(nome)){
+      alertas.push({msg:'Sem nenhum registro hoje',nivel:'vermelho'})
+    }
+    // 2. Indisponível após ter trabalhado
+    const jaTrabalhou=regs.some(r=>!r.status||r.status==='Bastão')
+    const statusIndisp=aberto&&(!aberto.status||aberto.status==='Indisponível'||aberto.status==='Indisponivel')
+    if(statusIndisp&&duracaoStatusAtual>30&&jaTrabalhou){
+      alertas.push({msg:`Indisponível há ${fmtRT(duracaoStatusAtual)}`,nivel:'vermelho'})
+    }
+    // 3. Almoço fora do padrão
+    for(const r of regs){
+      if((r.status||'').toLowerCase().includes('almoç')){
+        const dur=durAtual(r.inicio,r.fim,r.duracao_min)
+        if(r.fim&&dur<30) alertas.push({msg:`Almoço curto: ${fmtRT(dur)}`,nivel:'vermelho'})
+        if(dur>60) alertas.push({msg:`Almoço longo: ${fmtRT(dur)}`,nivel:'vermelho'})
+      }
+    }
+    // 4. Status longo > 3h
+    for(const r of regs){
+      if(['Sessão','Projeto','Atividades','Treinamento','Reunião','Atend. Presencial'].includes(r.status)){
+        const dur=durAtual(r.inicio,r.fim,r.duracao_min)
+        if(dur>180) alertas.push({msg:`${r.status} há ${fmtRT(dur)} (>3h)`,nivel:'vermelho'})
+      }
+    }
+
+    const nivelGeral:NivelAlerta=alertas.some(a=>a.nivel==='vermelho')?'vermelho':alertas.some(a=>a.nivel==='amarelo')?'amarelo':'ok'
+    return {nome,regs,aberto,totalMin,tempoStatus,tempoBastaoRegistrado,tempoBastaoAgora,statusAtual,duracaoStatusAtual,alertas,nivelGeral,estaTrabalhandoAgora}
+  })
+
+  const comAlerta=porConsultor.filter(c=>c.nivelGeral!=='ok')
+  const semAlerta=porConsultor.filter(c=>c.nivelGeral==='ok')
+
+  const nomeExib=(n:string)=>{const p=n.trim().split(' ').filter(Boolean);return p.length<=1?p[0]:`${p[0]} ${p[p.length-1]}`}
+
+  if(loading) return <Spinner/>
+
+  const renderCard=(c:typeof porConsultor[0])=>{
+    const expanded=expandido===c.nome
+    const isV=c.nivelGeral==='vermelho'
+    return(
+      <div key={c.nome} onClick={()=>setExpandido(expanded?null:c.nome)}
+        className={`rounded-2xl border-2 transition-all cursor-pointer ${isV?'border-red-400 bg-red-50 shadow-lg shadow-red-100':'border-gray-200 bg-white hover:border-gray-300'}`}>
+        <div className="p-3">
+          {/* Nome + status */}
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="flex items-center gap-1.5">
+              {isV&&<span className="animate-bounce">🚨</span>}
+              <span className="text-sm font-black text-gray-800">{nomeExib(c.nome)}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              {c.statusAtual&&<span className="text-[10px] font-black px-2 py-0.5 rounded-full text-white"
+                style={{background:COR_STATUS[c.statusAtual]||'#94a3b8'}}>{c.statusAtual}</span>}
+              {c.duracaoStatusAtual>0&&<span className={`text-[10px] font-bold ${isV?'text-red-600':'text-gray-500'}`}>{fmtRT(c.duracaoStatusAtual)}</span>}
+            </div>
+          </div>
+
+          {/* Badge bastão */}
+          {(naFila.has(c.nome)||c.tempoBastaoRegistrado>0)&&(
+            <div className="flex flex-wrap gap-1 mb-2">
+              {naFila.has(c.nome)&&c.tempoBastaoAgora>0&&(
+                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-red-500 text-white animate-pulse">
+                  🔥 Bastão: {fmtRT(c.tempoBastaoAgora)}
+                </span>
+              )}
+              {c.tempoBastaoRegistrado>0&&(
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
+                  🔥 Total hoje: {fmtRT(c.tempoBastaoRegistrado)}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Alertas */}
+          {c.alertas.length>0&&(
+            <div className="flex flex-col gap-1">
+              {c.alertas.map((a,i)=>(
+                <div key={i} className={`flex items-start gap-1 text-[10px] font-bold rounded-lg px-2 py-1 ${a.nivel==='vermelho'?'bg-red-100 text-red-700':'bg-amber-100 text-amber-700'}`}>
+                  <span>{a.nivel==='vermelho'?'🚨':'⚠️'}</span><span>{a.msg}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Barra mini */}
+          {c.alertas.length===0&&c.regs.length>0&&(
+            <div className="flex gap-0.5 h-1.5 rounded-full overflow-hidden mt-1">
+              {Object.entries(c.tempoStatus).map(([s,dur])=>(
+                <div key={s} title={`${s}: ${fmtRT(dur)}`} style={{flex:dur,background:COR_STATUS[s]||'#94a3b8'}}/>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Expandido */}
+        {expanded&&(
+          <div className="border-t border-gray-100 px-3 pb-3 pt-2">
+            <p className="text-[10px] font-black text-gray-400 uppercase mb-2">Registros hoje — {fmtRT(c.totalMin)}</p>
+            <div className="space-y-1 max-h-48 overflow-y-auto">
+              {c.regs.length===0?<p className="text-xs text-gray-400 italic">Nenhum registro</p>
+              :c.regs.map((r,i)=>{
+                const dur=durAtual(r.inicio,r.fim,r.duracao_min)
+                const s=r.status||'Bastão'
+                const ini=new Date(r.inicio).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
+                const fim=r.fim?new Date(r.fim).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'⟳ agora'
+                return(
+                  <div key={i} className="flex items-center gap-2 text-[10px]">
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{background:COR_STATUS[s]||'#94a3b8'}}/>
+                    <span className="font-bold text-gray-700 w-20 flex-shrink-0">{s}</span>
+                    <span className="text-gray-400">{ini} → {fim}</span>
+                    <span className="font-bold ml-auto" style={{color:COR_STATUS[s]||'#94a3b8'}}>{fmtRT(dur)}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return(
+    <div className="flex flex-col gap-5">
+      <div className="grid grid-cols-3 gap-4">
+        <div className={`rounded-2xl p-4 text-center border-2 ${comAlerta.length>0?'border-red-400 bg-red-50':'border-green-300 bg-green-50'}`}>
+          <p className="text-[10px] font-black text-gray-500 uppercase mb-1">🚨 Com Alerta</p>
+          <p className={`text-3xl font-black ${comAlerta.length>0?'text-red-600':'text-green-600'}`}>{comAlerta.length}</p>
+          <p className="text-[10px] text-gray-400">consultores</p>
+        </div>
+        <div className="rounded-2xl p-4 text-center border-2 border-green-300 bg-green-50">
+          <p className="text-[10px] font-black text-gray-500 uppercase mb-1">✅ Sem Alerta</p>
+          <p className="text-3xl font-black text-green-600">{semAlerta.length}</p>
+          <p className="text-[10px] text-gray-400">consultores</p>
+        </div>
+        <div className="rounded-2xl p-4 text-center border-2 border-gray-200 bg-gray-50">
+          <p className="text-[10px] font-black text-gray-500 uppercase mb-1">⏱ Atualizado</p>
+          <p className="text-sm font-black text-gray-600">{new Date(tick).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</p>
+          <p className="text-[10px] text-gray-400">a cada 2 min</p>
+        </div>
+      </div>
+      {comAlerta.length>0&&(
+        <div>
+          <h3 className="text-sm font-black text-red-600 mb-3">🚨 Precisam de atenção ({comAlerta.length})</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            {comAlerta.map(c=>renderCard(c))}
+          </div>
+        </div>
+      )}
+      {semAlerta.length>0&&(
+        <div>
+          <h3 className="text-sm font-black text-green-600 mb-3">✅ Sem alertas ({semAlerta.length})</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+            {semAlerta.map(c=>renderCard(c))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function PainelGerencial({ inline = false, perfil = 'Gestor' }: { inline?: boolean; perfil?: string }) {
 
   const isConsultor = perfil === 'Consultor';
@@ -1459,339 +1701,5 @@ export function PainelGerencial({ inline = false, perfil = 'Gestor' }: { inline?
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
 // ABA AUDITORIA TEMPO REAL
 // ─────────────────────────────────────────────────────────────────────────────
-interface RegistroRT {
-  consultor: string;
-  status: string;
-  inicio: string;
-  fim: string | null;
-  duracao_min: number | null;
-}
-
-interface BastaoLogRT {
-  consultor: string;
-  tipo: string; // 'bastao' | 'fila'
-  inicio: string;
-  fim: string | null;
-  duracao_min: number | null;
-}
-
-type NivelAlerta = 'ok' | 'amarelo' | 'vermelho';
-interface Alerta { msg: string; nivel: NivelAlerta }
-
-function duracaoAtual(inicio: string, fim: string | null, duracao_min: number | null): number {
-  if (duracao_min != null) return duracao_min;
-  if (fim) return Math.max(0, Math.round((new Date(fim).getTime() - new Date(inicio).getTime()) / 60000));
-  return Math.max(0, Math.round((Date.now() - new Date(inicio).getTime()) / 60000));
-}
-
-function fmtMinRT(m: number): string {
-  if (!m || m <= 0) return '0m';
-  const h = Math.floor(m / 60), r = m % 60;
-  return h > 0 ? `${h}h ${r}m` : `${r}m`;
-}
-
-function AbaAuditoriaTempoReal() {
-  const [registros,    setRegistros]    = useState<RegistroRT[]>([]);
-  const [bastaoLogs,   setBastaoLogs]   = useState<BastaoLogRT[]>([]);
-  const [loading,      setLoading]      = useState(true);
-  const [agora,        setAgora]        = useState(Date.now());
-  const [expandido,    setExpandido]    = useState<string | null>(null);
-  const consultores = USUARIOS_SISTEMA.filter(u => u.perfil === 'Consultor').map(u => u.nome);
-
-  // Pega estado atual da fila para saber quem está no bastão agora
-  const { filaEproc, filaJpe } = useBastaoStore();
-  const naFilaAgora = new Set([...filaEproc, ...filaJpe]);
-
-  // Tick a cada 30 segundos para atualizar durações
-  useEffect(() => {
-    const t = setInterval(() => setAgora(Date.now()), 30000);
-    return () => clearInterval(t);
-  }, []);
-
-  // Reload a cada 2 minutos
-  useEffect(() => {
-    load();
-    const t = setInterval(load, 120000);
-    return () => clearInterval(t);
-  }, []);
-
-  async function load() {
-    setLoading(true);
-    const [regRes, logRes] = await Promise.all([
-      supabase.from('registros_status')
-        .select('consultor,status,inicio,fim,duracao_min')
-        .eq('data', hoje())
-        .order('inicio', { ascending: true }),
-      supabase.from('bastao_logs')
-        .select('consultor,tipo,inicio,fim,duracao_min')
-        .eq('data', hoje())
-        .order('inicio', { ascending: true }),
-    ]);
-    setRegistros(regRes.data || []);
-    setBastaoLogs(logRes.data || []);
-    setLoading(false);
-  }
-
-  // Agrupa registros por consultor
-  const porConsultor = consultores.map(nome => {
-    const regs = registros.filter(r => r.consultor === nome);
-    const aberto = regs.find(r => !r.fim);
-    const totalMin = regs.reduce((s, r) => s + duracaoAtual(r.inicio, r.fim, r.duracao_min), 0);
-
-    // Tempo por status (incluindo Bastão = '' ou 'Bastão')
-    const tempoStatus: Record<string, number> = {};
-    for (const r of regs) {
-      const s = (!r.status || r.status === '') ? 'Bastão' : r.status;
-      tempoStatus[s] = (tempoStatus[s] || 0) + duracaoAtual(r.inicio, r.fim, r.duracao_min);
-    }
-
-    // Tempo total no bastão hoje
-    const tempoBastaoHoje = tempoStatus['Bastão'] || 0;
-
-    // Tempo no bastão hoje (soma de todos os logs tipo 'bastao')
-    const logsBastao = bastaoLogs.filter(l => l.consultor === nome && l.tipo === 'bastao');
-    const tempoBastaoTotal = logsBastao.reduce((s, l) => s + duracaoAtual(l.inicio, l.fim, l.duracao_min), 0);
-    const bastaoAberto = logsBastao.find(l => !l.fim);
-    const tempoBastaoAtual = bastaoAberto ? duracaoAtual(bastaoAberto.inicio, null, null) : 0;
-
-    // Tempo na fila hoje (soma de todos os logs tipo 'fila')
-    const logsFila = bastaoLogs.filter(l => l.consultor === nome && l.tipo === 'fila');
-    const tempoFilaTotal = logsFila.reduce((s, l) => s + duracaoAtual(l.inicio, l.fim, l.duracao_min), 0);
-    const filaAberto = logsFila.find(l => !l.fim);
-    const tempoFilaAtual = filaAberto ? duracaoAtual(filaAberto.inicio, null, null) : 0;
-
-    // Status atual e tempo no status atual
-    const statusAtual = aberto ? (aberto.status || 'Bastão') : (regs.length > 0 ? (regs[regs.length-1].status || 'Bastão') : null);
-    const duracaoStatusAtual = aberto ? duracaoAtual(aberto.inicio, null, null) : 0;
-
-    // ── ALERTAS ────────────────────────────────────────────────────────────
-    const alertas: Alerta[] = [];
-
-    // 1. Sem registro no dia — ignora se está na fila/bastão agora
-    const temBastao = regs.some(r => !r.status || r.status === 'Bastão');
-    const estaNoFilaAgora = naFilaAgora.has(nome);
-    if (regs.length === 0 && !estaNoFilaAgora) {
-      alertas.push({ msg: 'Sem nenhum registro hoje', nivel: 'vermelho' });
-    }
-
-    // 2. Indisponível após ter trabalhado (Bastão, Sessão, etc.) - alerta suspeito
-    const statusIndisponivel = !aberto?.status || aberto?.status === 'Indisponível' || aberto?.status === 'Indisponivel';
-    if (aberto && statusIndisponivel && duracaoStatusAtual > 30 && temBastao) {
-      alertas.push({ msg: `Indisponível há ${fmtMinRT(duracaoStatusAtual)} — verificar`, nivel: 'vermelho' });
-    }
-
-    // 3. Almoço fora do padrão (< 30min ou > 60min)
-    for (const r of regs) {
-      if ((r.status || '').toLowerCase().includes('almoç')) {
-        const dur = duracaoAtual(r.inicio, r.fim, r.duracao_min);
-        if (r.fim && dur < 30) {
-          alertas.push({ msg: `Almoço curto: ${fmtMinRT(dur)} (mínimo esperado: 30min)`, nivel: 'vermelho' });
-        }
-        if (dur > 60) {
-          alertas.push({ msg: `Almoço longo: ${fmtMinRT(dur)} (máximo esperado: 1h)`, nivel: 'vermelho' });
-        }
-      }
-    }
-
-    // 4. Sessão / Projeto / Atividades / Treinamento > 3h no mesmo registro
-    const STATUS_LONGOS = ['Sessão', 'Projeto', 'Atividades', 'Treinamento', 'Reunião', 'Atend. Presencial'];
-    for (const r of regs) {
-      if (STATUS_LONGOS.includes(r.status)) {
-        const dur = duracaoAtual(r.inicio, r.fim, r.duracao_min);
-        if (dur > 180) {
-          alertas.push({ msg: `${r.status} há ${fmtMinRT(dur)} (> 3h no mesmo status)`, nivel: 'vermelho' });
-        }
-      }
-    }
-
-    const nivelGeral: NivelAlerta = alertas.some(a => a.nivel === 'vermelho') ? 'vermelho'
-      : alertas.some(a => a.nivel === 'amarelo') ? 'amarelo' : 'ok';
-
-    return { nome, regs, aberto, totalMin, tempoStatus, tempoBastaoHoje, statusAtual, duracaoStatusAtual,
-             tempoBastaoTotal, tempoBastaoAtual, tempoFilaTotal, tempoFilaAtual,
-             bastaoAberto: !!bastaoAberto, filaAberto: !!filaAberto, alertas, nivelGeral };
-  });
-
-  const comAlerta   = porConsultor.filter(c => c.nivelGeral !== 'ok');
-  const semAlerta   = porConsultor.filter(c => c.nivelGeral === 'ok');
-  const totalAlertas = comAlerta.length;
-
-  const STATUS_COR: Record<string, string> = {
-    'Bastão': '#ef4444', 'Reunião': '#14b8a6', 'Treinamento': '#8b5cf6',
-    'Sessão': '#f43f5e', 'Atend. Presencial': '#f97316', 'Projeto': '#6366f1',
-    'Atividades': '#3b82f6', 'Almoço': '#f59e0b', 'Indisponível': '#9ca3af', 'Indisponivel': '#9ca3af',
-  };
-
-  if (loading) return <Spinner />;
-
-  const CardConsultor = ({ c }: { c: typeof porConsultor[0] }) => {
-    const isExpanded = expandido === c.nome;
-    const isVermelho = c.nivelGeral === 'vermelho';
-    const isAmarelo  = c.nivelGeral === 'amarelo';
-
-    return (
-      <div
-        className={`rounded-2xl border-2 transition-all cursor-pointer ${
-          isVermelho ? 'border-red-400 bg-red-50 shadow-lg shadow-red-100' :
-          isAmarelo  ? 'border-amber-400 bg-amber-50' :
-          'border-gray-200 bg-white hover:border-gray-300'
-        }`}
-        onClick={() => setExpandido(isExpanded ? null : c.nome)}
-      >
-        {/* Cabeçalho */}
-        <div className="p-3">
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <div className="flex items-center gap-2">
-              {isVermelho && (
-                <span className="text-base animate-bounce">🚨</span>
-              )}
-              <span className="text-sm font-black text-gray-800">
-                {(()=>{const p=c.nome.trim().split(' ').filter(Boolean);return p.length<=1?p[0]:`${p[0]} ${p[p.length-1]}`})()}
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              {c.statusAtual && (
-                <span
-                  className="text-[10px] font-black px-2 py-0.5 rounded-full text-white"
-                  style={{ background: STATUS_COR[c.statusAtual] || '#94a3b8' }}
-                >
-                  {c.statusAtual}
-                </span>
-              )}
-              {c.duracaoStatusAtual > 0 && (
-                <span className={`text-[10px] font-bold ${isVermelho ? 'text-red-600' : 'text-gray-500'}`}>
-                  {fmtMinRT(c.duracaoStatusAtual)}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Bastão / Fila badges */}
-          {(c.bastaoAberto || c.filaAberto || c.tempoBastaoHoje > 0 || naFilaAgora.has(c.nome)) && (
-            <div className="flex flex-wrap gap-1 mb-2">
-              {/* Está na fila agora (detectado pelo estado do store) */}
-              {naFilaAgora.has(c.nome) && (c.statusAtual === 'Bastão' || c.statusAtual === '' || !c.statusAtual) && (
-                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-red-500 text-white animate-pulse">
-                  🔥 No bastão agora {c.duracaoStatusAtual > 0 ? `(${fmtMinRT(c.duracaoStatusAtual)})` : ''}
-                </span>
-              )}
-              {/* Total no bastão hoje */}
-              {c.tempoBastaoHoje > 0 && (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
-                  🔥 Bastão hoje: {fmtMinRT(c.tempoBastaoHoje)}
-                </span>
-              )}
-            </div>
-          )}
-          {c.alertas.length > 0 && (
-            <div className="flex flex-col gap-1">
-              {c.alertas.map((a, i) => (
-                <div key={i} className={`flex items-start gap-1.5 text-[10px] font-bold rounded-lg px-2 py-1 ${
-                  a.nivel === 'vermelho' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
-                }`}>
-                  <span>{a.nivel === 'vermelho' ? '🚨' : '⚠️'}</span>
-                  <span>{a.msg}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Sem alerta — barra mini de status */}
-          {c.alertas.length === 0 && c.regs.length > 0 && (
-            <div className="flex gap-0.5 h-1.5 rounded-full overflow-hidden mt-1">
-              {Object.entries(c.tempoStatus).map(([s, dur]) => (
-                <div
-                  key={s}
-                  title={`${s}: ${fmtMinRT(dur)}`}
-                  style={{ flex: dur, background: STATUS_COR[s] || '#94a3b8' }}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Expandido — detalhe dos registros */}
-        {isExpanded && (
-          <div className="border-t border-gray-100 px-3 pb-3 pt-2">
-            <p className="text-[10px] font-black text-gray-400 uppercase tracking-wide mb-2">
-              Registros de hoje — total: {fmtMinRT(c.totalMin)}
-            </p>
-            <div className="space-y-1 max-h-48 overflow-y-auto">
-              {c.regs.length === 0 ? (
-                <p className="text-xs text-gray-400 italic">Nenhum registro</p>
-              ) : c.regs.map((r, i) => {
-                const dur = duracaoAtual(r.inicio, r.fim, r.duracao_min);
-                const s = r.status || 'Bastão';
-                const ini = new Date(r.inicio).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-                const fim = r.fim ? new Date(r.fim).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '⟳ agora';
-                return (
-                  <div key={i} className="flex items-center gap-2 text-[10px]">
-                    <span
-                      className="w-2 h-2 rounded-full flex-shrink-0"
-                      style={{ background: STATUS_COR[s] || '#94a3b8' }}
-                    />
-                    <span className="font-bold text-gray-700 w-20 flex-shrink-0">{s}</span>
-                    <span className="text-gray-400">{ini} → {fim}</span>
-                    <span className="font-bold ml-auto" style={{ color: STATUS_COR[s] || '#94a3b8' }}>
-                      {fmtMinRT(dur)}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  return (
-    <div className="flex flex-col gap-5">
-      {/* Header com resumo */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className={`rounded-2xl p-4 text-center border-2 ${totalAlertas > 0 ? 'border-red-400 bg-red-50' : 'border-green-300 bg-green-50'}`}>
-          <p className="text-[10px] font-black text-gray-500 uppercase tracking-wide mb-1">🚨 Com Alerta</p>
-          <p className={`text-3xl font-black ${totalAlertas > 0 ? 'text-red-600' : 'text-green-600'}`}>{totalAlertas}</p>
-          <p className="text-[10px] text-gray-400 mt-0.5">consultores</p>
-        </div>
-        <div className="rounded-2xl p-4 text-center border-2 border-green-300 bg-green-50">
-          <p className="text-[10px] font-black text-gray-500 uppercase tracking-wide mb-1">✅ Sem Alerta</p>
-          <p className="text-3xl font-black text-green-600">{semAlerta.length}</p>
-          <p className="text-[10px] text-gray-400 mt-0.5">consultores</p>
-        </div>
-        <div className="rounded-2xl p-4 text-center border-2 border-gray-200 bg-gray-50">
-          <p className="text-[10px] font-black text-gray-500 uppercase tracking-wide mb-1">⏱ Atualizado</p>
-          <p className="text-sm font-black text-gray-600">{new Date(agora).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</p>
-          <p className="text-[10px] text-gray-400 mt-1">atualiza a cada 2 min</p>
-        </div>
-      </div>
-
-      {/* Alertas primeiro */}
-      {comAlerta.length > 0 && (
-        <div>
-          <h3 className="text-sm font-black text-red-600 mb-3 flex items-center gap-2">
-            🚨 Precisam de atenção ({comAlerta.length})
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-            {comAlerta.map(c => <CardConsultor key={c.nome} c={c} />)}
-          </div>
-        </div>
-      )}
-
-      {/* Sem alertas */}
-      {semAlerta.length > 0 && (
-        <div>
-          <h3 className="text-sm font-black text-green-600 mb-3 flex items-center gap-2">
-            ✅ Sem alertas ({semAlerta.length})
-          </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
-            {semAlerta.map(c => <CardConsultor key={c.nome} c={c} />)}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}

@@ -667,6 +667,7 @@ function AbaAtividades({canEdit,ferias}:{canEdit:boolean;ferias:Ferias[]}){
   const[tipoSel,setTipoSel]=useState('')
   const[tipoCustom,setTipoCustom]=useState('')
   const[observacao,setObservacao]=useState('')
+  const[horarioAtv,setHorarioAtv]=useState('')
   const[consultores,setConsultores]=useState<string[]>([])
   const[dataForm,setDataForm]=useState('')
   const[salvando,setSalvando]=useState(false)
@@ -686,6 +687,7 @@ function AbaAtividades({canEdit,ferias}:{canEdit:boolean;ferias:Ferias[]}){
   function abrirModal(data:string,item?:AgendaAtividade){
     setDataForm(item?.data??data); setTipoSel(item?.tipo??''); setTipoFiltro('')
     setTipoCustom(''); setObservacao(item?.observacao??'')
+    setHorarioAtv((item as any)?.horario??'')
     setConsultores(item?.consultores??[]); setModal({data,item})
   }
 
@@ -695,7 +697,7 @@ function AbaAtividades({canEdit,ferias}:{canEdit:boolean;ferias:Ferias[]}){
     if(!tipoFinal)return alert('Informe o tipo de atividade!')
     setSalvando(true)
     const existe=itens.find(i=>i.data===dataForm&&i.tipo===tipoFinal)
-    const payload={data:dataForm,tipo:tipoFinal,observacao:observacao.trim()||undefined,consultores,criado_por:meuLogin||'',criado_em:new Date().toISOString()}
+    const payload={data:dataForm,tipo:tipoFinal,observacao:observacao.trim()||undefined,horario:horarioAtv||undefined,consultores,criado_por:meuLogin||'',criado_em:new Date().toISOString()}
     if(modal?.item){await supabase.from('agenda_atividades').update(payload).eq('id',modal.item.id)}
     else if(existe){await supabase.from('agenda_atividades').update(payload).eq('id',existe.id)}
     else{await supabase.from('agenda_atividades').insert(payload)}
@@ -789,7 +791,10 @@ function AbaAtividades({canEdit,ferias}:{canEdit:boolean;ferias:Ferias[]}){
                       <div key={a.id} className={`bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm ${canEdit?'cursor-pointer hover:border-blue-300':''}`}
                         onClick={()=>canEdit&&abrirModal(a.data,a)}>
                         <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-1.5">
                           <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${cfg.badge}`}>{cfg.icon} {a.tipo}</span>
+                          {(a as any).horario&&<span className="text-[10px] font-bold bg-white border border-gray-200 px-1.5 py-0.5 rounded-full text-gray-600">🕐 {(a as any).horario}</span>}
+                        </div>
                           {canEdit&&<button onClick={e=>{e.stopPropagation();handleDeletar(a.id)}} className="w-4 h-4 rounded text-[9px] text-red-400 hover:text-red-600 flex items-center justify-center">✕</button>}
                         </div>
                         {a.observacao&&<p className="text-[10px] text-gray-500 mt-1 italic">{a.observacao}</p>}
@@ -840,6 +845,8 @@ function AbaAtividades({canEdit,ferias}:{canEdit:boolean;ferias:Ferias[]}){
                 {getCfgAtv(tipoFinal).icon} {tipoFinal}
               </div>}
 
+              <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 mt-3">Horário (opcional)</label>
+              <input type="time" value={horarioAtv} onChange={e=>setHorarioAtv(e.target.value)} className={inp}/>
               <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 mt-3">Observação</label>
               <textarea value={observacao} onChange={e=>setObservacao(e.target.value)} rows={2}
                 className={`${inp} resize-none`} placeholder="Detalhes..."/>
@@ -1166,7 +1173,7 @@ function AbaTreinamentosExternos({canEdit,meuLogin,ferias}:{canEdit:boolean;meuL
   const[itens,setItens]=useState<TreinamentoExterno[]>([])
   const[loading,setLoading]=useState(true)
   const[modal,setModal]=useState<TreinamentoExterno|'new'|null>(null)
-  const[form,setForm]=useState({data:'',tipo:'EPROC',tipoCustom:'',local_nome:'',local_tipo:'',localFiltro:'',consultores:[] as string[],observacao:''})
+  const[form,setForm]=useState({data:'',tipo:'EPROC',tipoCustom:'',local_nome:'',local_tipo:'',localFiltro:'',consultores:[] as string[],observacao:'',horario:''})
   const[salvando,setSalvando]=useState(false)
   const[filtroTipo,setFiltroTipo]=useState('Todos')
 
@@ -1185,7 +1192,7 @@ function AbaTreinamentosExternos({canEdit,meuLogin,ferias}:{canEdit:boolean;meuL
   async function handleSalvar(){
     if(!form.data||!form.local_nome)return alert('Preencha data e local!')
     setSalvando(true)
-    const payload={data:form.data,tipo:tipoFinal,local_nome:form.local_nome,local_tipo:form.local_tipo||null,consultores:form.consultores,observacao:form.observacao||null,criado_por:meuLogin}
+    const payload={data:form.data,tipo:tipoFinal,local_nome:form.local_nome,local_tipo:form.local_tipo||null,consultores:form.consultores,observacao:form.observacao||null,horario:form.horario||null,criado_por:meuLogin}
     if(modal&&modal!=='new'&&(modal as TreinamentoExterno).id){await supabase.from('treinamentos_externos').update(payload).eq('id',(modal as TreinamentoExterno).id)}
     else{await supabase.from('treinamentos_externos').insert(payload)}
     setSalvando(false); setModal(null); await load()
@@ -1209,7 +1216,7 @@ function AbaTreinamentosExternos({canEdit,meuLogin,ferias}:{canEdit:boolean;meuL
             ))}
           </div>
         </div>
-        {canEdit&&<button onClick={()=>{setModal('new');setForm({data:'',tipo:'EPROC',tipoCustom:'',local_nome:'',local_tipo:'',localFiltro:'',consultores:[],observacao:''})}}
+        {canEdit&&<button onClick={()=>{setModal('new');setForm({data:'',tipo:'EPROC',tipoCustom:'',local_nome:'',local_tipo:'',localFiltro:'',consultores:[],observacao:'',horario:''})}}
           className="bg-green-600 hover:bg-green-700 text-white font-bold px-4 py-2 rounded-xl text-sm">+ Treinamento</button>}
       </div>
       {loading?<div className="flex justify-center py-8"><div className="w-7 h-7 border-4 border-green-400 border-t-transparent rounded-full animate-spin"/></div>
@@ -1229,14 +1236,17 @@ function AbaTreinamentosExternos({canEdit,meuLogin,ferias}:{canEdit:boolean;meuL
                   </div>
                   <p className="text-sm font-black text-gray-800">{it.local_nome}</p>
                   {it.local_tipo&&<p className="text-xs text-gray-500">{it.local_tipo}</p>}
-                  {it.observacao&&<p className="text-xs text-gray-500 mt-1 italic">💬 {it.observacao}</p>}
+                  <div className="flex items-center gap-2 mt-1">
+                    {(it as any).horario&&<span className="text-[10px] font-bold bg-white border border-gray-200 px-2 py-0.5 rounded-full">🕐 {(it as any).horario}</span>}
+                    {it.observacao&&<p className="text-xs text-gray-500 italic">💬 {it.observacao}</p>}
+                  </div>
                   <div className="flex flex-wrap gap-1 mt-2">
                     {(it.consultores||[]).length===0?<span className="text-[10px] text-gray-400 italic">Sem consultor</span>
                     :(it.consultores||[]).map(c=><ChipConsultor key={c} nome={c}/>)}
                   </div>
                 </div>
                 {canEdit&&<div className="flex gap-1 flex-shrink-0">
-                  <button onClick={()=>{setModal(it);setForm({data:it.data,tipo:it.tipo,tipoCustom:'',local_nome:it.local_nome,local_tipo:it.local_tipo||'',localFiltro:'',consultores:it.consultores||[],observacao:it.observacao||''})}} className="text-xs text-gray-400 hover:text-blue-500 p-1">✏️</button>
+                  <button onClick={()=>{setModal(it);setForm({data:it.data,tipo:it.tipo,tipoCustom:'',local_nome:it.local_nome,local_tipo:it.local_tipo||'',localFiltro:'',consultores:it.consultores||[],observacao:it.observacao||'',horario:(it as any).horario||''})}} className="text-xs text-gray-400 hover:text-blue-500 p-1">✏️</button>
                   <button onClick={()=>handleDeletar(it.id)} className="text-xs text-gray-400 hover:text-red-500 p-1">✕</button>
                 </div>}
               </div>
@@ -1284,6 +1294,8 @@ function AbaTreinamentosExternos({canEdit,meuLogin,ferias}:{canEdit:boolean;meuL
               </div>
             )}
 
+            <label className="block text-xs font-black text-gray-400 uppercase mb-1">Horário (opcional)</label>
+            <input type="time" value={form.horario} onChange={e=>setForm(f=>({...f,horario:e.target.value}))} className={inp+' mb-3'}/>
             <label className="block text-xs font-black text-gray-400 uppercase mb-1">Observação</label>
             <textarea value={form.observacao} onChange={e=>setForm(f=>({...f,observacao:e.target.value}))} rows={2}
               className={`${inp} resize-none mb-3`} placeholder="Detalhes, link, instruções..."/>
@@ -1331,7 +1343,7 @@ export function PainelEquipeCompleto(){
   if(!aberto)return(
     <button onClick={()=>setAberto(true)}
       className="group flex items-center justify-between w-full px-6 py-3 rounded-2xl font-bold text-sm shadow-sm border transition-all bg-white text-indigo-700 border-indigo-200 hover:bg-indigo-50 cursor-pointer">
-      <span className="flex items-center gap-2"><span className="text-lg">📅</span>Sessões &amp; Plantões &amp; Atividades</span>
+      <span className="flex items-center gap-2"><span className="text-lg">👥</span>Painel Equipe</span>
       <span className="text-xs text-gray-400 font-bold">Clique para expandir ▼</span>
     </button>
   )
