@@ -73,8 +73,10 @@ async function registrarMudancaStatus(consultor: string, novoStatus: string, det
       const durMin = Math.max(0, Math.round((new Date(agora).getTime() - new Date(aberto.inicio).getTime()) / 60000))
       await supabase.from('registros_status').update({ fim: agora, duracao_min: durMin }).eq('id', aberto.id)
     }
-    if (novoStatus && novoStatus !== 'Indisponivel') {
-      await supabase.from('registros_status').insert({ consultor, status: novoStatus, subtipo: '', detalhes: detalhe || '', inicio: agora, data: hoje })
+    // '' = entrou na fila/bastão → grava como 'Bastão'
+    const statusParaGravar = novoStatus === '' ? 'Bastão' : novoStatus
+    if (statusParaGravar && statusParaGravar !== 'Indisponivel' && statusParaGravar !== 'Indisponível') {
+      await supabase.from('registros_status').insert({ consultor, status: statusParaGravar, subtipo: '', detalhes: detalhe || '', inicio: agora, data: hoje })
     }
   } catch (err) { console.error('Erro ao registrar status:', err) }
 }
@@ -90,6 +92,38 @@ async function registrarPassagemBastao(consultor: string, equipe: string) {
       await supabase.from('daily_logs').insert({ date: hoje, consultor, source: 'bastao_pass', payload: { bastoes_assumidos: 1, equipe, ultima_passagem: new Date().toISOString() } });
     }
   } catch (err) { console.error('Erro daily_logs:', err); }
+}
+
+async function registrarBastaoLog(consultor: string, equipe: string, tipo: 'bastao' | 'fila', acao: 'entrada' | 'saida') {
+  const agora = new Date().toISOString()
+  const hoje  = agora.split('T')[0]
+  try {
+    if (acao === 'entrada') {
+      // Abre novo log
+      await supabase.from('bastao_logs').insert({
+        data: hoje, consultor, equipe, tipo, inicio: agora
+      })
+    } else {
+      // Fecha log aberto mais recente do mesmo tipo
+      const { data: aberto } = await supabase
+        .from('bastao_logs')
+        .select('id, inicio')
+        .eq('consultor', consultor)
+        .eq('tipo', tipo)
+        .is('fim', null)
+        .order('inicio', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (aberto) {
+        const durMin = Math.max(0, Math.round(
+          (new Date(agora).getTime() - new Date(aberto.inicio).getTime()) / 60000
+        ))
+        await supabase.from('bastao_logs')
+          .update({ fim: agora, duracao_min: durMin })
+          .eq('id', aberto.id)
+      }
+    }
+  } catch (err) { console.error('Erro bastao_logs:', err) }
 }
 
 export const useBastaoStore = create<BastaoState>((set, get) => ({
@@ -168,6 +202,10 @@ export const useBastaoStore = create<BastaoState>((set, get) => ({
     const ns: Partial<BastaoState> = eq === "EPROC" ? { filaEproc: nf } : { filaJpe: nf };
     ns.statusTexto = { ...s.statusTexto, [nome]: inQ ? 'Indisponivel' : '' };
     set(ns); get()._saveToDb(ns, inQ ? `Removeu ${nome}` : `Colocou ${nome}`);
+    // Grava Bastão ao entrar na fila, fecha ao sair
+    registrarMudancaStatus(nome, inQ ? 'Indisponivel' : '', '');
+    // Log na bastao_logs
+    registrarBastaoLog(nome, eq, 'fila', inQ ? 'saida' : 'entrada');
   },
   toggleTelefone: (nome) => { const s = get(); const a = s.quickIndicators[nome] || { telefone: false, cafe: false }; const ns = { quickIndicators: { ...s.quickIndicators, [nome]: { ...a, telefone: !a.telefone, cafe: false } } }; set(ns); get()._saveToDb(ns, `Telefone ${nome}`); },
   toggleCafe: (nome) => { const s = get(); const a = s.quickIndicators[nome] || { telefone: false, cafe: false }; const ns = { quickIndicators: { ...s.quickIndicators, [nome]: { ...a, cafe: !a.cafe, telefone: false } } }; set(ns); get()._saveToDb(ns, `Cafe ${nome}`); },
@@ -186,6 +224,9 @@ export const useBastaoStore = create<BastaoState>((set, get) => ({
       set({ modalAtendimentoPos: { equipe, quemPassou: resp, quemRecebeu: nf[0], rotacaoId } })
     })
     registrarPassagemBastao(nf[0], equipe);
+    // Log: resp sai do bastão, nf[0] entra no bastão
+    registrarBastaoLog(resp,  equipe, 'bastao', 'saida');
+    registrarBastaoLog(nf[0], equipe, 'bastao', 'entrada');
     fetch("https://matheusgomes12.app.n8n.cloud/webhook/b0fe5e6a-7586-4d95-8472-463d84237c09", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ evento: "bastao_giro", team_name: equipe === "EPROC" ? "Eproc" : "Legados", com_bastao_agora: nf[0], proximos: nf.slice(1) }) }).catch(() => {});
   }
 }))

@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import { supabase } from '../lib/supabase';
 import { EQUIPE_EPROC, EQUIPE_JPE, USUARIOS_SISTEMA } from '../constants';
+import { useBastaoStore } from '../store/useBastaoStore';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const hoje   = (): string => new Date().toISOString().split('T')[0];
@@ -1469,6 +1470,14 @@ interface RegistroRT {
   duracao_min: number | null;
 }
 
+interface BastaoLogRT {
+  consultor: string;
+  tipo: string; // 'bastao' | 'fila'
+  inicio: string;
+  fim: string | null;
+  duracao_min: number | null;
+}
+
 type NivelAlerta = 'ok' | 'amarelo' | 'vermelho';
 interface Alerta { msg: string; nivel: NivelAlerta }
 
@@ -1486,10 +1495,15 @@ function fmtMinRT(m: number): string {
 
 function AbaAuditoriaTempoReal() {
   const [registros,    setRegistros]    = useState<RegistroRT[]>([]);
+  const [bastaoLogs,   setBastaoLogs]   = useState<BastaoLogRT[]>([]);
   const [loading,      setLoading]      = useState(true);
   const [agora,        setAgora]        = useState(Date.now());
   const [expandido,    setExpandido]    = useState<string | null>(null);
   const consultores = USUARIOS_SISTEMA.filter(u => u.perfil === 'Consultor').map(u => u.nome);
+
+  // Pega estado atual da fila para saber quem está no bastão agora
+  const { filaEproc, filaJpe } = useBastaoStore();
+  const naFilaAgora = new Set([...filaEproc, ...filaJpe]);
 
   // Tick a cada 30 segundos para atualizar durações
   useEffect(() => {
@@ -1506,12 +1520,18 @@ function AbaAuditoriaTempoReal() {
 
   async function load() {
     setLoading(true);
-    const { data } = await supabase
-      .from('registros_status')
-      .select('consultor,status,inicio,fim,duracao_min')
-      .eq('data', hoje())
-      .order('inicio', { ascending: true });
-    setRegistros(data || []);
+    const [regRes, logRes] = await Promise.all([
+      supabase.from('registros_status')
+        .select('consultor,status,inicio,fim,duracao_min')
+        .eq('data', hoje())
+        .order('inicio', { ascending: true }),
+      supabase.from('bastao_logs')
+        .select('consultor,tipo,inicio,fim,duracao_min')
+        .eq('data', hoje())
+        .order('inicio', { ascending: true }),
+    ]);
+    setRegistros(regRes.data || []);
+    setBastaoLogs(logRes.data || []);
     setLoading(false);
   }
 
@@ -1521,12 +1541,27 @@ function AbaAuditoriaTempoReal() {
     const aberto = regs.find(r => !r.fim);
     const totalMin = regs.reduce((s, r) => s + duracaoAtual(r.inicio, r.fim, r.duracao_min), 0);
 
-    // Tempo por status
+    // Tempo por status (incluindo Bastão = '' ou 'Bastão')
     const tempoStatus: Record<string, number> = {};
     for (const r of regs) {
-      const s = r.status || 'Bastão';
+      const s = (!r.status || r.status === '') ? 'Bastão' : r.status;
       tempoStatus[s] = (tempoStatus[s] || 0) + duracaoAtual(r.inicio, r.fim, r.duracao_min);
     }
+
+    // Tempo total no bastão hoje
+    const tempoBastaoHoje = tempoStatus['Bastão'] || 0;
+
+    // Tempo no bastão hoje (soma de todos os logs tipo 'bastao')
+    const logsBastao = bastaoLogs.filter(l => l.consultor === nome && l.tipo === 'bastao');
+    const tempoBastaoTotal = logsBastao.reduce((s, l) => s + duracaoAtual(l.inicio, l.fim, l.duracao_min), 0);
+    const bastaoAberto = logsBastao.find(l => !l.fim);
+    const tempoBastaoAtual = bastaoAberto ? duracaoAtual(bastaoAberto.inicio, null, null) : 0;
+
+    // Tempo na fila hoje (soma de todos os logs tipo 'fila')
+    const logsFila = bastaoLogs.filter(l => l.consultor === nome && l.tipo === 'fila');
+    const tempoFilaTotal = logsFila.reduce((s, l) => s + duracaoAtual(l.inicio, l.fim, l.duracao_min), 0);
+    const filaAberto = logsFila.find(l => !l.fim);
+    const tempoFilaAtual = filaAberto ? duracaoAtual(filaAberto.inicio, null, null) : 0;
 
     // Status atual e tempo no status atual
     const statusAtual = aberto ? (aberto.status || 'Bastão') : (regs.length > 0 ? (regs[regs.length-1].status || 'Bastão') : null);
@@ -1535,15 +1570,17 @@ function AbaAuditoriaTempoReal() {
     // ── ALERTAS ────────────────────────────────────────────────────────────
     const alertas: Alerta[] = [];
 
-    // 1. Sem registro no dia
-    if (regs.length === 0) {
+    // 1. Sem registro no dia — ignora se está na fila/bastão agora
+    const temBastao = regs.some(r => !r.status || r.status === 'Bastão');
+    const estaNoFilaAgora = naFilaAgora.has(nome);
+    if (regs.length === 0 && !estaNoFilaAgora) {
       alertas.push({ msg: 'Sem nenhum registro hoje', nivel: 'vermelho' });
     }
 
-    // 2. Indisponível sendo detectado (status atual = Indisponível ou '' com tempo > 30min)
+    // 2. Indisponível após ter trabalhado (Bastão, Sessão, etc.) - alerta suspeito
     const statusIndisponivel = !aberto?.status || aberto?.status === 'Indisponível' || aberto?.status === 'Indisponivel';
-    if (aberto && statusIndisponivel && duracaoStatusAtual > 30) {
-      alertas.push({ msg: `Indisponível há ${fmtMinRT(duracaoStatusAtual)} — sem atividade`, nivel: 'vermelho' });
+    if (aberto && statusIndisponivel && duracaoStatusAtual > 30 && temBastao) {
+      alertas.push({ msg: `Indisponível há ${fmtMinRT(duracaoStatusAtual)} — verificar`, nivel: 'vermelho' });
     }
 
     // 3. Almoço fora do padrão (< 30min ou > 60min)
@@ -1573,7 +1610,9 @@ function AbaAuditoriaTempoReal() {
     const nivelGeral: NivelAlerta = alertas.some(a => a.nivel === 'vermelho') ? 'vermelho'
       : alertas.some(a => a.nivel === 'amarelo') ? 'amarelo' : 'ok';
 
-    return { nome, regs, aberto, totalMin, tempoStatus, statusAtual, duracaoStatusAtual, alertas, nivelGeral };
+    return { nome, regs, aberto, totalMin, tempoStatus, tempoBastaoHoje, statusAtual, duracaoStatusAtual,
+             tempoBastaoTotal, tempoBastaoAtual, tempoFilaTotal, tempoFilaAtual,
+             bastaoAberto: !!bastaoAberto, filaAberto: !!filaAberto, alertas, nivelGeral };
   });
 
   const comAlerta   = porConsultor.filter(c => c.nivelGeral !== 'ok');
@@ -1630,7 +1669,23 @@ function AbaAuditoriaTempoReal() {
             </div>
           </div>
 
-          {/* Alertas */}
+          {/* Bastão / Fila badges */}
+          {(c.bastaoAberto || c.filaAberto || c.tempoBastaoHoje > 0 || naFilaAgora.has(c.nome)) && (
+            <div className="flex flex-wrap gap-1 mb-2">
+              {/* Está na fila agora (detectado pelo estado do store) */}
+              {naFilaAgora.has(c.nome) && (c.statusAtual === 'Bastão' || c.statusAtual === '' || !c.statusAtual) && (
+                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-red-500 text-white animate-pulse">
+                  🔥 No bastão agora {c.duracaoStatusAtual > 0 ? `(${fmtMinRT(c.duracaoStatusAtual)})` : ''}
+                </span>
+              )}
+              {/* Total no bastão hoje */}
+              {c.tempoBastaoHoje > 0 && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
+                  🔥 Bastão hoje: {fmtMinRT(c.tempoBastaoHoje)}
+                </span>
+              )}
+            </div>
+          )}
           {c.alertas.length > 0 && (
             <div className="flex flex-col gap-1">
               {c.alertas.map((a, i) => (
