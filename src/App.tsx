@@ -18,6 +18,9 @@ import { Login } from './components/Login'
 import { BannerAnomalia, BotaoAnomalia } from './components/BotaoAnomalia'
 import { BadgePendencias } from './components/BadgePendencias'
 import { ModalAtividadePresencial } from './components/ModalAtividadePresencial'
+import { MeusAtendimentos } from './components/MeusAtendimentos'
+import { BaseRespostas } from './components/BaseRespostas'
+import { ChamadosEproc } from './components/ChamadosEproc'
 import { useBastaoStore } from './store/useBastaoStore'
 import { USUARIOS_SISTEMA, getRamal } from './constants'
 
@@ -113,9 +116,10 @@ function App() {
                 <BotaoAnomalia />
                 <BotaoDicasDiarias />
                 <BotaoCarometro />
+                <MeusAtendimentos />
+                <BaseRespostas />
+                <ChamadosEproc />
                 <PainelFerramentas />
-                <TriagemBastao />
-                <PainelMural />
               </div>
             </div>
             <PainelEquipeCompleto />
@@ -131,10 +135,12 @@ function App() {
                 <PainelEquipe />
                 <PainelLogmein />
                 <BadgePendencias modoGestor={false} />
-                <PainelFerramentas />
                 <BotaoAnomalia />
                 <BotaoDicasDiarias />
                 <BotaoCarometro />
+                <MeusAtendimentos />
+                <BaseRespostas />
+                <ChamadosEproc />
                 <PainelFerramentas />
                 <TriagemBastao />
               </div>

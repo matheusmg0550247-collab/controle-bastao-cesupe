@@ -6,7 +6,7 @@ import { Document, Packer, Paragraph, TextRun, AlignmentType } from 'docx'
 import { saveAs } from 'file-saver'
 
 export function PainelFerramentas() {
-  const { meuLogin, enviarRegistroN8n, salvarCertidaoSupabase } = useBastaoStore()
+  const { meuLogin, enviarRegistroN8n, salvarCertidaoSupabase, abrirModalAtividade } = useBastaoStore()
   const [modalAberto, setModalAberto] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -32,10 +32,11 @@ export function PainelFerramentas() {
   const [atdDescricao, setAtdDescricao] = useState('')
   const [atdCanal, setAtdCanal] = useState('Presencial')
   const [atdDesfecho, setAtdDesfecho] = useState('Resolvido - Cesupe')
+  const [atdSolucao, setAtdSolucao] = useState('')
   // REMOVIDO: atdJira
 
   const usuarioOptions = ["Cartório", "Gabinete", "Público Externo", "Interno", "Outros"]
-  const sistemaOptions = ["Eproc", "JPE", "PJe", "SEI", "Conveniados", "Outros"]
+  const sistemaOptions = ["Eproc", "JPE", "PJe", "SEI", "Themis", "Conveniados", "Outros"]
   const canalOptions   = ["Whatsapp", "Telefone", "Presencial", "E-mail", "Outros"]
   const desfechoOptions = ["Resolvido - Cesupe", "Encaminhado N2", "Encaminhado N3", "Aguardando Usuário", "Outros"]
 
@@ -69,6 +70,68 @@ export function PainelFerramentas() {
   const [bastoesPendentes, setBastoesPendentes] = useState<RotacaoPendente[]>([])
   const [pendenteExpandido, setPendenteExpandido] = useState<number | null>(null)
 
+  // ── Atividades presenciais pendentes ──────────────────────────────────────
+  interface AtividadePendente {
+    id: number
+    consultor: string
+    data_hora: string
+    status_origem: string
+  }
+  const [atividadesPendentes, setAtividadesPendentes]       = useState<AtividadePendente[]>([])
+  const [atPendenteExpandido, setAtPendenteExpandido]       = useState<number | null>(null)
+  const [pendPresAtividade,   setPendPresAtividade]         = useState('')
+  const [pendPresHoraInicio,  setPendPresHoraInicio]        = useState('')
+  const [pendPresHoraFim,     setPendPresHoraFim]           = useState('')
+  const [pendPresDuracao,     setPendPresDuracao]           = useState('')
+  const [pendPresParticipantes, setPendPresParticipantes]   = useState('1')
+  const [pendPresResumo,      setPendPresResumo]            = useState('')
+
+  async function buscarAtividadesPendentes() {
+    if (!meuLogin) return
+    const { data } = await supabase
+      .from('atividades_pendentes')
+      .select('id, consultor, data_hora, status_origem')
+      .eq('consultor', meuLogin)
+      .eq('registrado', false)
+      .order('data_hora', { ascending: true })
+    setAtividadesPendentes(data || [])
+  }
+
+  async function handleRegistrarAtividadePendente(pend: AtividadePendente) {
+    if (!pendPresAtividade.trim()) return alert('Preencha a atividade!')
+    setLoading(true)
+    try {
+      const dataPend = pend.data_hora.split('T')[0]
+      const dur = Number(pendPresDuracao) || (() => {
+        const [hi, mi] = pendPresHoraInicio.split(':').map(Number)
+        const [hf, mf] = pendPresHoraFim.split(':').map(Number)
+        return Math.max(0, (hf * 60 + mf) - (hi * 60 + mi))
+      })()
+      const { error } = await supabase.from('atividades_presenciais').insert({
+        data:          dataPend,
+        consultor:     pend.consultor,
+        atividade:     pendPresAtividade,
+        hora_inicio:   pendPresHoraInicio || null,
+        hora_fim:      pendPresHoraFim || null,
+        duracao_min:   dur,
+        participantes: Number(pendPresParticipantes) || 1,
+        resumo:        pendPresResumo.trim() || null,
+      })
+      if (error) throw error
+      // Marca como registrado
+      await supabase
+        .from('atividades_pendentes')
+        .update({ registrado: true, registrado_em: new Date().toISOString() })
+        .eq('id', pend.id)
+      alert('✅ Atividade registrada e pendência zerada!')
+      setAtPendenteExpandido(null)
+      setPendPresAtividade(''); setPendPresHoraInicio(''); setPendPresHoraFim('')
+      setPendPresDuracao(''); setPendPresResumo(''); setPendPresParticipantes('1')
+      await buscarAtividadesPendentes()
+    } catch { alert('❌ Erro ao registrar atividade.') }
+    finally { setLoading(false) }
+  }
+
   // Form inline de cada pendência
   const [pendAtdUsuario,   setPendAtdUsuario]   = useState('Público Externo')
   const [pendAtdSetor,     setPendAtdSetor]     = useState('')
@@ -76,13 +139,16 @@ export function PainelFerramentas() {
   const [pendAtdDescricao, setPendAtdDescricao] = useState('')
   const [pendAtdCanal,     setPendAtdCanal]     = useState('Whatsapp')
   const [pendAtdDesfecho,  setPendAtdDesfecho]  = useState('Resolvido - Cesupe')
+  const [pendAtdSolucao,  setPendAtdSolucao]   = useState('')
 
   // Busca ao montar E em tempo real
   useEffect(() => {
     buscarPendentes()
+    buscarAtividadesPendentes()
     const ch = supabase
       .channel('ferramentas-pendentes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bastao_rotacoes' }, buscarPendentes)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'atividades_pendentes' }, buscarAtividadesPendentes)
       .subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [meuLogin])
@@ -117,6 +183,7 @@ export function PainelFerramentas() {
           descricao: pendAtdDescricao,
           canal: pendAtdCanal,
           desfecho: pendAtdDesfecho,
+          solucao: pendAtdSolucao || null,
           resumo: '',
         })
         .select('id')
@@ -128,7 +195,7 @@ export function PainelFerramentas() {
         .eq('id', rot.id)
       alert('✅ Atendimento registrado e pendência zerada!')
       setPendenteExpandido(null)
-      setPendAtdDescricao(''); setPendAtdSetor('')
+      setPendAtdDescricao(''); setPendAtdSetor(''); setPendAtdSolucao('')
       // lista atualiza via realtime, mas forçamos também
       await buscarPendentes()
     } catch { alert('❌ Erro ao registrar.') }
@@ -173,17 +240,14 @@ export function PainelFerramentas() {
         descricao: atdDescricao,
         canal: atdCanal,
         desfecho: atdDesfecho,
+        solucao: atdSolucao || null,
         resumo: '',
       })
       if (error) throw error
 
-      // 2. Envia pro n8n
-      const msg = `📝 **Novo Atendimento**\n👤 **Consultor:** ${meuLogin}\n📅 **Data:** ${formatarDataBR(atdData)}\n🧑‍💼 **Usuário:** ${atdUsuario}\n🏢 **Setor:** ${atdSetor}\n💻 **Sistema:** ${atdSistema}\n📋 **Descrição:** ${atdDescricao}\n📞 **Canal:** ${atdCanal}\n✅ **Desfecho:** ${atdDesfecho}`
-      await enviarRegistroN8n("ATENDIMENTOS", { data: formatarDataBR(atdData), usuario: atdUsuario, setor: atdSetor, sistema: atdSistema, descricao: atdDescricao, canal: atdCanal, desfecho: atdDesfecho }, msg)
-
       alert('✅ Atendimento registrado!')
       setModalAberto(null)
-      setAtdDescricao(''); setAtdSetor('')
+      setAtdDescricao(''); setAtdSetor(''); setAtdSolucao('')
     } catch (err) {
       console.error(err)
       alert('❌ Erro ao salvar atendimento no banco.')
@@ -298,6 +362,17 @@ export function PainelFerramentas() {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
         <button onClick={() => setModalAberto('lanche')} className={btnClass}>🥪 Solicitar Lanche</button>
+        <button
+          onClick={() => { buscarAtividadesPendentes(); setModalAberto('presencial') }}
+          className={btnClass}
+        >
+          🤝 At. Presencial
+          {atividadesPendentes.length > 0 && (
+            <span className="ml-1 bg-violet-500 text-white text-[10px] font-black rounded-full w-4 h-4 inline-flex items-center justify-center">
+              {atividadesPendentes.length}
+            </span>
+          )}
+        </button>
         <div className="relative">
           <button onClick={() => setShowRamais(v => !v)} className={btnClass + " w-full"}>☎️ Ramais</button>
           {showRamais && (
@@ -416,6 +491,8 @@ export function PainelFerramentas() {
                             <input type="text" value={pendAtdSetor} onChange={e => setPendAtdSetor(e.target.value)} className={inputClass} placeholder="Ex: 3ª Vara Cível..." />
                             <label className={labelClass}>Descrição: *</label>
                             <input type="text" value={pendAtdDescricao} onChange={e => setPendAtdDescricao(e.target.value)} className={inputClass} placeholder="Descreva o atendimento..." />
+                            <label className={labelClass}>Solução aplicada: <span className="text-gray-400 font-normal">(opcional)</span></label>
+                            <textarea value={pendAtdSolucao} onChange={e => setPendAtdSolucao(e.target.value)} className={`${inputClass} h-16 resize-none`} placeholder="Descreva a solução aplicada..." />
                             <div className="grid grid-cols-2 gap-2 mt-1">
                               <div>
                                 <label className={labelClass}>Canal:</label>
@@ -457,6 +534,8 @@ export function PainelFerramentas() {
             <select value={atdCanal} onChange={(e) => setAtdCanal(e.target.value)} className={`${inputClass} focus:ring-blue-500`}>{canalOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}</select>
             <label className={labelClass}>Desfecho:</label>
             <select value={atdDesfecho} onChange={(e) => setAtdDesfecho(e.target.value)} className={`${inputClass} focus:ring-blue-500`}>{desfechoOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}</select>
+            <label className={labelClass}>Solução aplicada: <span className="text-gray-400 font-normal">(opcional)</span></label>
+            <textarea value={atdSolucao} onChange={(e) => setAtdSolucao(e.target.value)} className={`${inputClass} h-16 resize-none focus:ring-blue-500`} placeholder="Descreva a solução aplicada..." />
             <div className="flex gap-2 mt-6">
               <button disabled={loading || !atdDescricao} onClick={handleRegistrarAtendimento} className="flex-1 bg-blue-500 text-white font-bold py-3 rounded-xl shadow-md disabled:opacity-50">
                 {loading ? 'Salvando...' : 'Registrar Atendimento'}
@@ -538,6 +617,88 @@ export function PainelFerramentas() {
               <button disabled={loading} onClick={handleSalvarENotificar} className="flex-[2] bg-[#FF4B4B] hover:bg-red-600 text-white font-bold py-4 rounded-xl shadow-md transition-transform active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2">{loading ? 'Salvando...' : '💾 Salvar e Mandar pro n8n'}</button>
             </div>
             <button onClick={() => setModalAberto(null)} className="mt-4 px-6 py-2 bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-lg font-bold text-sm transition-colors border border-gray-300">❌ Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {modalAberto === 'presencial' && (
+        <div className="fixed inset-0 z-50 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl p-6 border border-gray-200 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-xl font-extrabold text-violet-700 mb-4 flex items-center gap-2">🤝 Atividades Presenciais</h3>
+
+            {/* ── Pendências ── */}
+            {atividadesPendentes.length > 0 && (
+              <div className="mb-5">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-sm font-extrabold text-violet-700">⏳ Atividades pendentes de registro</span>
+                  <span className="bg-violet-400 text-white font-black text-xs px-2 py-0.5 rounded-full">{atividadesPendentes.length}</span>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {atividadesPendentes.map(pend => {
+                    const fmtDt = new Date(pend.data_hora).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                    const expandido = atPendenteExpandido === pend.id
+                    return (
+                      <div key={pend.id} className="border-2 border-violet-300 bg-violet-50 rounded-xl overflow-hidden">
+                        <button
+                          onClick={() => setAtPendenteExpandido(expandido ? null : pend.id)}
+                          className="w-full flex items-center justify-between p-3 hover:bg-violet-100 transition-all text-left"
+                        >
+                          <div>
+                            <span className="text-xs bg-violet-200 text-violet-800 font-bold px-2 py-0.5 rounded-full mr-2">{pend.status_origem}</span>
+                            <span className="text-sm font-bold text-gray-700">{fmtDt}</span>
+                          </div>
+                          <span className="text-gray-400 text-lg">{expandido ? '▲' : '▼'}</span>
+                        </button>
+                        {expandido && (
+                          <div className="border-t border-violet-200 p-3 bg-white">
+                            <label className={labelClass}>Atividade: *</label>
+                            <input type="text" value={pendPresAtividade} onChange={e => setPendPresAtividade(e.target.value)} className={inputClass} placeholder="Ex: Sessão 3ª Câmara, Treinamento BNMP..." autoFocus />
+                            <div className="grid grid-cols-3 gap-2 mt-1">
+                              <div>
+                                <label className={labelClass}>Início:</label>
+                                <input type="time" value={pendPresHoraInicio} onChange={e => { setPendPresHoraInicio(e.target.value); const [hi,mi]=e.target.value.split(':').map(Number); const [hf,mf]=pendPresHoraFim.split(':').map(Number)||[0,0]; const d=Math.max(0,(hf*60+mf)-(hi*60+mi)); if(pendPresHoraFim) setPendPresDuracao(String(d)) }} className={inputClass} />
+                              </div>
+                              <div>
+                                <label className={labelClass}>Fim:</label>
+                                <input type="time" value={pendPresHoraFim} onChange={e => { setPendPresHoraFim(e.target.value); const [hi,mi]=pendPresHoraInicio.split(':').map(Number)||[0,0]; const [hf,mf]=e.target.value.split(':').map(Number); const d=Math.max(0,(hf*60+mf)-(hi*60+mi)); if(pendPresHoraInicio) setPendPresDuracao(String(d)) }} className={inputClass} />
+                              </div>
+                              <div>
+                                <label className={labelClass}>Duração (min):</label>
+                                <input type="number" value={pendPresDuracao} onChange={e => setPendPresDuracao(e.target.value)} className={`${inputClass} font-bold text-violet-700`} min="0" />
+                              </div>
+                            </div>
+                            <label className={labelClass}>Participantes:</label>
+                            <input type="number" value={pendPresParticipantes} onChange={e => setPendPresParticipantes(e.target.value)} className={inputClass} min="1" />
+                            <label className={labelClass}>Resumo: <span className="text-gray-400 font-normal">(opcional)</span></label>
+                            <textarea value={pendPresResumo} onChange={e => setPendPresResumo(e.target.value)} rows={2} className={`${inputClass} resize-none`} placeholder="Observações sobre a atividade..." />
+                            <button
+                              disabled={loading || !pendPresAtividade.trim()}
+                              onClick={() => handleRegistrarAtividadePendente(pend)}
+                              className="w-full mt-3 bg-violet-600 hover:bg-violet-700 text-white font-bold py-2.5 rounded-xl disabled:opacity-50 transition-all text-sm"
+                            >
+                              {loading ? 'Salvando...' : '✅ Registrar e zerar pendência'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="border-t border-gray-200 my-5" />
+                <p className="text-xs font-bold text-gray-500 mb-3">📋 Ou registre uma nova atividade avulsa:</p>
+              </div>
+            )}
+
+            {/* ── Registro avulso ── */}
+            <button
+              onClick={() => { setModalAberto(null); abrirModalAtividade({ consultor: meuLogin, statusAtual: '', avulso: true }) }}
+              className="w-full bg-violet-600 hover:bg-violet-700 text-white font-bold py-3 rounded-xl transition-all mb-2"
+            >
+              🤝 Registrar nova atividade presencial
+            </button>
+            <button onClick={() => setModalAberto(null)} className="w-full bg-gray-200 text-gray-800 font-bold py-3 rounded-xl hover:bg-gray-300">
+              Fechar
+            </button>
           </div>
         </div>
       )}

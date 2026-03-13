@@ -82,17 +82,25 @@ function fmtLocal(d: Date) {
 const DIAS_PT: Record<number,string> = {1:'Segunda-feira',2:'Terça-feira',3:'Quarta-feira',4:'Quinta-feira',5:'Sexta-feira'}
 
 // ─── Card de atividade ────────────────────────────────────────────────────────
-function CardAtividade({ item, canEdit, onEdit, onDelete }: {
+function CardAtividade({ item, canEdit, onEdit, onDelete, modoExcluir, selecionado, onToggleSel }: {
   item: AgendaAtividade; canEdit: boolean; onEdit: () => void; onDelete: () => void
+  modoExcluir?: boolean; selecionado?: boolean; onToggleSel?: () => void
 }) {
   const cfg = getCfg(item.tipo)
   return (
-    <div className={`border-2 rounded-2xl p-3 transition-all ${cfg.bg} ${cfg.border} ${canEdit ? 'hover:shadow-md' : ''}`}>
+    <div
+      onClick={modoExcluir ? onToggleSel : undefined}
+      className={`border-2 rounded-2xl p-3 transition-all ${cfg.bg} ${cfg.border} ${modoExcluir ? 'cursor-pointer' : canEdit ? 'hover:shadow-md' : ''} ${selecionado ? 'ring-2 ring-red-500 opacity-70' : ''}`}>
       <div className="flex items-start justify-between gap-1 mb-2">
-        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${cfg.badge}`}>
+        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${cfg.badge} flex items-center gap-1`}>
+          {modoExcluir && (
+            <span className={`w-3.5 h-3.5 rounded border-2 inline-flex items-center justify-center flex-shrink-0 ${selecionado ? 'bg-red-500 border-red-500 text-white' : 'border-gray-400 bg-white'}`}>
+              {selecionado && '✓'}
+            </span>
+          )}
           {cfg.icon} {item.tipo}
         </span>
-        {canEdit && (
+        {canEdit && !modoExcluir && (
           <div className="flex gap-1 flex-shrink-0">
             <button onClick={onEdit} className="w-6 h-6 rounded-lg bg-white/70 hover:bg-white border border-gray-200 flex items-center justify-center text-xs" title="Editar">✏️</button>
             <button onClick={onDelete} className="w-6 h-6 rounded-lg bg-red-50 hover:bg-red-100 border border-red-200 flex items-center justify-center text-xs text-red-500" title="Excluir">✕</button>
@@ -117,9 +125,11 @@ function CardAtividade({ item, canEdit, onEdit, onDelete }: {
 }
 
 // ─── Modal adicionar/editar ───────────────────────────────────────────────────
+const DIAS_SEMANA = ['Seg','Ter','Qua','Qui','Sex']
+
 function ModalAtividade({ data, item, onSave, onClose, meuLogin }: {
   data: string; item?: AgendaAtividade
-  onSave: (p: Omit<AgendaAtividade,'id'|'criado_em'>) => void
+  onSave: (p: Omit<AgendaAtividade,'criado_em'> & { id?: number; datasExtras?: string[] }) => void
   onClose: () => void; meuLogin: string
 }) {
   const isNew = !item
@@ -128,10 +138,31 @@ function ModalAtividade({ data, item, onSave, onClose, meuLogin }: {
   const [observacao,   setObservacao]   = useState(item?.observacao ?? '')
   const [consultores,  setConsultores]  = useState<string[]>(item?.consultores ?? [])
   const [dataItem,     setDataItem]     = useState(item?.data ?? data)
+  // Repetição em múltiplos dias (só ao criar)
+  const [repetirAtivo, setRepetirAtivo] = useState(false)
+  const [dataFim,      setDataFim]      = useState('')
+  const [diasSel,      setDiasSel]      = useState<number[]>([1,2,3,4,5]) // seg=1..sex=5
 
   const catFiltrado = useMemo(() =>
     TIPOS_ATIVIDADE.filter(t => t.toLowerCase().includes(tipoFiltro.toLowerCase()))
   , [tipoFiltro])
+
+  // Calcula datas extras com base no intervalo e dias selecionados
+  const datasExtras = useMemo(() => {
+    if (!repetirAtivo || !dataFim || dataFim <= dataItem) return []
+    const datas: string[] = []
+    const cur = new Date(dataItem + 'T12:00:00')
+    const fim = new Date(dataFim + 'T12:00:00')
+    cur.setDate(cur.getDate() + 1) // começa no dia seguinte
+    while (cur <= fim) {
+      const dow = cur.getDay() // 0=dom,1=seg..5=sex,6=sab
+      if (diasSel.includes(dow)) {
+        datas.push(cur.toISOString().split('T')[0])
+      }
+      cur.setDate(cur.getDate() + 1)
+    }
+    return datas
+  }, [repetirAtivo, dataItem, dataFim, diasSel])
 
   const inp = "w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-400 bg-white"
   const lbl = "block text-[10px] font-black text-gray-400 uppercase tracking-wide mb-1 mt-3"
@@ -171,7 +202,6 @@ function ModalAtividade({ data, item, onSave, onClose, meuLogin }: {
             </div>
           )}
 
-          {/* Preview cor */}
           {tipo && (
             <div className={`mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border-2 ${getCfg(tipo).bg} ${getCfg(tipo).border} ${getCfg(tipo).text}`}>
               {getCfg(tipo).icon} {tipo}
@@ -194,14 +224,62 @@ function ModalAtividade({ data, item, onSave, onClose, meuLogin }: {
               )
             })}
           </div>
+
+          {/* ── Repetição (só na criação) ── */}
+          {isNew && (
+            <div className="mt-4 border border-blue-100 rounded-xl bg-blue-50 p-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={repetirAtivo} onChange={e=>setRepetirAtivo(e.target.checked)}
+                  className="w-4 h-4 rounded text-blue-600" />
+                <span className="text-xs font-black text-blue-700">🔁 Repetir em múltiplos dias</span>
+              </label>
+              {repetirAtivo && (
+                <div className="mt-3 space-y-2">
+                  <div>
+                    <label className="text-[10px] font-black text-blue-500 uppercase">Data final</label>
+                    <input type="date" value={dataFim} min={dataItem}
+                      onChange={e=>setDataFim(e.target.value)} className={`${inp} mt-1`} />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-blue-500 uppercase">Dias da semana</label>
+                    <div className="flex gap-1.5 mt-1 flex-wrap">
+                      {DIAS_SEMANA.map((d,i) => {
+                        const dow = i+1 // 1=seg..5=sex
+                        const sel = diasSel.includes(dow)
+                        return (
+                          <button key={d} onClick={()=>setDiasSel(prev=>prev.includes(dow)?prev.filter(x=>x!==dow):[...prev,dow].sort())}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${sel?'bg-blue-600 text-white':'bg-white border border-blue-200 text-blue-600'}`}>
+                            {d}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                  {datasExtras.length > 0 && (
+                    <p className="text-xs text-blue-600 font-bold">
+                      ✅ Será criada em {datasExtras.length + 1} dias (incluindo {new Date(dataItem+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})})
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0">
           <button onClick={() => {
             if (!tipo.trim()) return alert('Informe o tipo de atividade!')
-            onSave({ data: dataItem, tipo: tipo.trim(), observacao: observacao.trim() || undefined, consultores, criado_por: meuLogin })
+            onSave({
+              id: item?.id,
+              data: dataItem,
+              tipo: tipo.trim(),
+              observacao: observacao.trim() || undefined,
+              consultores,
+              criado_por: meuLogin,
+              datasExtras: repetirAtivo && datasExtras.length > 0 ? datasExtras : undefined,
+            })
           }} className="flex-[2] bg-blue-600 hover:bg-blue-700 text-white font-black py-3 rounded-xl">
-            💾 Salvar
+            {repetirAtivo && datasExtras.length > 0 ? `💾 Salvar em ${datasExtras.length + 1} dias` : '💾 Salvar'}
           </button>
           <button onClick={onClose} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-3 rounded-xl">Cancelar</button>
         </div>
@@ -220,6 +298,8 @@ export function PainelGestaoAtividades() {
   const [semanaOffset,   setSemanaOffset]   = useState(0)
   const [modal,          setModal]          = useState<{data:string; item?:AgendaAtividade}|null>(null)
   const [filtroConsultor,setFiltroConsultor]= useState('Todos')
+  const [modoExcluir,    setModoExcluir]    = useState(false)
+  const [selecionados,   setSelecionados]   = useState<number[]>([])
 
   const monday   = useMemo(()=>{const m=getMonday(new Date());m.setDate(m.getDate()+semanaOffset*7);return m},[semanaOffset])
   const weekDays = useMemo(()=>getWeekDays(monday),[monday])
@@ -237,16 +317,31 @@ export function PainelGestaoAtividades() {
     setLoading(false)
   }
 
-  async function handleSalvar(payload: Omit<AgendaAtividade,'id'|'criado_em'>) {
-    const existe = itens.find(i => i.data===payload.data && i.tipo===payload.tipo)
-    if (existe) {
-      await supabase.from('agenda_atividades').update(payload).eq('id', existe.id)
+  async function handleSalvar(payload: Omit<AgendaAtividade,'criado_em'> & { id?: number; datasExtras?: string[] }) {
+    const { id, datasExtras, ...basePayload } = payload
+
+    if (id) {
+      // Edição: atualiza diretamente pelo ID — evita colisão de constraint
+      await supabase.from('agenda_atividades').update(basePayload).eq('id', id)
     } else {
-      await supabase.from('agenda_atividades').insert({...payload, criado_em: new Date().toISOString()})
+      // Novo: upsert para evitar duplicata (atualiza se data+tipo já existir)
+      await supabase.from('agenda_atividades')
+        .upsert({ ...basePayload, criado_em: new Date().toISOString() },
+          { onConflict: 'data,tipo', ignoreDuplicates: false })
+      // Repetição em múltiplos dias
+      if (datasExtras && datasExtras.length > 0) {
+        const extras = datasExtras.map(d => ({
+          ...basePayload, data: d, criado_em: new Date().toISOString()
+        }))
+        await supabase.from('agenda_atividades')
+          .upsert(extras, { onConflict: 'data,tipo', ignoreDuplicates: true })
+      }
     }
-    const dataBR = new Date(payload.data+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'})
-    const cfg = getCfg(payload.tipo)
-    const msg = `${cfg.icon} ${existe?'Atualizado':'Novo'}: ${payload.tipo} — ${dataBR} · ${payload.consultores.map(c=>c.split(' ')[0]).join(', ')||'sem consultor'}`
+
+    const dataBR = new Date(basePayload.data+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'})
+    const cfg = getCfg(basePayload.tipo)
+    const totalDias = datasExtras ? datasExtras.length + 1 : 1
+    const msg = `${cfg.icon} ${id?'Atualizado':'Novo'}: ${basePayload.tipo} — ${dataBR}${totalDias>1?` (+${totalDias-1} dias)`:''} · ${basePayload.consultores.map(c=>c.split(' ')[0]).join(', ')||'sem consultor'}`
     adicionarMensagemMural(msg, 'comum', meuLogin!)
     setModal(null); await load()
   }
@@ -255,6 +350,19 @@ export function PainelGestaoAtividades() {
     if (!confirm(`Remover "${item.tipo}"?`)) return
     await supabase.from('agenda_atividades').delete().eq('id', item.id)
     await load()
+  }
+
+  async function handleDeletarSelecionados() {
+    if (selecionados.length === 0) return
+    if (!confirm(`Remover ${selecionados.length} atividade(s) selecionada(s)?`)) return
+    await supabase.from('agenda_atividades').delete().in('id', selecionados)
+    setSelecionados([])
+    setModoExcluir(false)
+    await load()
+  }
+
+  function toggleSelecionado(id: number) {
+    setSelecionados(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
 
   async function copiarSemanaAnterior() {
@@ -316,6 +424,17 @@ export function PainelGestaoAtividades() {
               className="bg-white text-blue-700 hover:bg-blue-50 font-black px-3 py-1.5 rounded-xl text-xs">
               + Atividade
             </button>
+            <button
+              onClick={()=>{ setModoExcluir(v=>!v); setSelecionados([]) }}
+              className={`font-bold px-3 py-1.5 rounded-xl text-xs transition-all ${modoExcluir ? 'bg-red-500 text-white' : 'bg-white/20 hover:bg-white/30 text-white'}`}>
+              {modoExcluir ? '✕ Cancelar' : '🗑️ Excluir'}
+            </button>
+            {modoExcluir && selecionados.length > 0 && (
+              <button onClick={handleDeletarSelecionados}
+                className="bg-red-600 hover:bg-red-700 text-white font-black px-3 py-1.5 rounded-xl text-xs animate-pulse">
+                🗑️ Excluir {selecionados.length}
+              </button>
+            )}
             <button onClick={()=>setAberto(false)} className="text-white/60 hover:text-white text-xl px-1">✕</button>
           </div>
         </div>
@@ -370,7 +489,10 @@ export function PainelGestaoAtividades() {
                           {atvsDia.map(it => (
                             <CardAtividade key={it.id} item={it} canEdit={true}
                               onEdit={()=>setModal({data:it.data,item:it})}
-                              onDelete={()=>handleDeletar(it)} />
+                              onDelete={()=>handleDeletar(it)}
+                              modoExcluir={modoExcluir}
+                              selecionado={selecionados.includes(it.id)}
+                              onToggleSel={()=>toggleSelecionado(it.id)} />
                           ))}
                         </div>
                     }

@@ -93,7 +93,7 @@ export function ModalAtividadePresencial() {
 
   if (!modalAtividade) return null
 
-  const { consultor, statusAtual, proximoStatus, proximoFila, mostrarEscolhaApos } = modalAtividade
+  const { consultor, statusAtual, proximoStatus, proximoFila, mostrarEscolhaApos, avulso } = modalAtividade
   const icone = STATUS_ICONE[statusAtual] || '📋'
 
   // Verifica se o consultor está em alguma fila (para a tela de escolha)
@@ -113,6 +113,7 @@ export function ModalAtividadePresencial() {
     setLoading(true)
     try {
       if (!pular) {
+        // ── Salva a atividade normalmente ──
         const dur = Number(presDuracao) || calcMin(presHoraInicio, presHoraFim)
         const { error } = await supabase.from('atividades_presenciais').insert({
           data:          presData,
@@ -125,41 +126,53 @@ export function ModalAtividadePresencial() {
           resumo:        presResumo.trim() || null,
         })
         if (error) throw error
-
         setEtapa('sucesso')
         await new Promise(r => setTimeout(r, 1400))
-      } else {
-        // Pular: cria registro pendente em bastao_rotacoes (igual ao passar bastão)
-        // O consultor verá no badge e em Ferramentas → Atendimentos para registrar depois
-        const equipe = getEquipe(consultor) ?? 'EPROC'
-        await supabase.from('bastao_rotacoes').insert({
-          equipe,
-          de_consultor:    consultor,
-          para_consultor:  consultor,   // auto-referência indica "registro próprio pendente"
-          data_hora:       new Date().toISOString(),
-          registro_status: 'depois',
+      } else if (!avulso) {
+        // ── "Depois" / "Pular registro": grava pendência em atividades_pendentes ──
+        // Não cria em bastao_rotacoes (que é só para atendimentos de bastão)
+        await supabase.from('atividades_pendentes').insert({
+          consultor,
+          status_origem: statusAtual || 'Presencial',
+          data_hora:     new Date().toISOString(),
+          registrado:    false,
         })
       }
-
-      // Se veio de PainelStatus (troca de status) — aplica próximo e fecha
-      if (proximoStatus !== undefined) {
-        updateStatus(consultor, proximoStatus, proximoFila ?? false, '')
-        fecharModalAtividade()
-        return
-      }
-
-      // Se veio de PainelEquipe com flag — mostra escolha
-      if (mostrarEscolhaApos) {
-        setEtapa('escolha')
-        return
-      }
-
-      fecharModalAtividade()
     } catch (e) {
       console.error(e)
-      if (!pular) { alert('❌ Erro ao salvar atividade.'); setLoading(false); return }
-      fecharModalAtividade()
+      if (!pular) alert('❌ Erro ao salvar atividade. O status será atualizado mesmo assim.')
     }
+
+    // ── Aplica o próximo status (veio de PainelStatus) — sempre executa ──
+    if (proximoStatus !== undefined) {
+      updateStatus(consultor, proximoStatus, proximoFila ?? false, '')
+      fecharModalAtividade()
+      setLoading(false)
+      return
+    }
+
+    // ── Avulso: simplesmente fecha ──
+    if (avulso) {
+      fecharModalAtividade()
+      setLoading(false)
+      return
+    }
+
+    // ── Pular no modo PainelEquipe: mostra escolha ──
+    if (pular && mostrarEscolhaApos) {
+      setEtapa('escolha')
+      setLoading(false)
+      return
+    }
+
+    // ── Veio de PainelEquipe com flag — mostra escolha ──
+    if (mostrarEscolhaApos) {
+      setEtapa('escolha')
+      setLoading(false)
+      return
+    }
+
+    fecharModalAtividade()
     setLoading(false)
   }
 
@@ -231,10 +244,10 @@ export function ModalAtividadePresencial() {
                 <div className="flex items-center gap-3">
                   <span className="text-3xl">{icone}</span>
                   <div>
-                    <h3 className="text-lg font-black leading-tight">Registrar atividade</h3>
+                    <h3 className="text-lg font-black leading-tight">{avulso ? 'Registrar atividade' : 'Registrar atividade'}</h3>
                     <p className="text-sm text-white/80">
                       {consultor}
-                      {proximoStatus !== undefined && (
+                      {!avulso && proximoStatus !== undefined && (
                         <span className="ml-2 bg-white/20 px-2 py-0.5 rounded-full text-xs">
                           → {proximoStatus || 'Disponível'}
                         </span>
@@ -293,13 +306,24 @@ export function ModalAtividadePresencial() {
                 >
                   {loading ? 'Salvando...' : '💾 Salvar atividade'}
                 </button>
-                <button
-                  disabled={loading}
-                  onClick={() => handleSalvar(true)}
-                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-3 rounded-xl text-sm transition-all"
-                >
-                  ⏳ Depois
-                </button>
+                {/* Avulso: botão Cancelar. Status-change: Pular. Presencial normal: Depois */}
+                {avulso ? (
+                  <button
+                    disabled={loading}
+                    onClick={fecharModalAtividade}
+                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-3 rounded-xl text-sm transition-all"
+                  >
+                    Cancelar
+                  </button>
+                ) : (
+                  <button
+                    disabled={loading}
+                    onClick={() => handleSalvar(true)}
+                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-3 rounded-xl text-sm transition-all"
+                  >
+                    {proximoStatus !== undefined ? '⏩ Pular registro' : '⏳ Depois'}
+                  </button>
+                )}
               </div>
             </div>
           </>

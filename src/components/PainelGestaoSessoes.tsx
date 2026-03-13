@@ -175,7 +175,7 @@ function CardSessao({item,canEdit,onEdit,onDelete}:{item:AgendaDetalhe;canEdit:b
 // ─── Modal adicionar/editar ───────────────────────────────────────────────────
 function ModalSessao({data,item,onSave,onClose,meuLogin}:{
   data:string;item?:AgendaDetalhe;
-  onSave:(p:Omit<AgendaDetalhe,'id'|'criado_em'>)=>void;
+  onSave:(p:Omit<AgendaDetalhe,'criado_em'>&{id?:number})=>void;
   onClose:()=>void;meuLogin:string
 }){
   const isNew=!item
@@ -281,7 +281,7 @@ function ModalSessao({data,item,onSave,onClose,meuLogin}:{
         <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0">
           <button onClick={()=>{
             if(!nomeSessao.trim())return alert('Informe o nome da sessão!')
-            onSave({data:dataItem,nome_sessao:nomeSessao.trim().toUpperCase(),modalidade,
+            onSave({id:item?.id,data:dataItem,nome_sessao:nomeSessao.trim().toUpperCase(),modalidade,
               horario:horario||undefined,plenario:plenario||undefined,descricao:descricao.trim()||undefined,
               pauta:pauta?Number(pauta):undefined,mesa:mesa?Number(mesa):undefined,
               consultores,criado_por:meuLogin})
@@ -351,26 +351,30 @@ export function PainelGestaoSessoes(){
     setLoading(false)
   }
 
-  async function handleSalvar(payload:Omit<AgendaDetalhe,'id'|'criado_em'>){
-    const existe=itens.find(i=>i.data===payload.data&&i.nome_sessao===payload.nome_sessao)
-    if(existe){
-      await supabase.from('agenda_detalhes').update(payload).eq('id',existe.id)
+  async function handleSalvar(payload:Omit<AgendaDetalhe,'criado_em'>&{id?:number}){
+    const{id,...basePayload}=payload
+    if(id){
+      // Edição: atualiza pelo ID — evita colisão de constraint
+      await supabase.from('agenda_detalhes').update(basePayload).eq('id',id)
     } else {
-      await supabase.from('agenda_detalhes').insert({...payload,criado_em:new Date().toISOString()})
+      // Novo: upsert para evitar duplicata
+      await supabase.from('agenda_detalhes')
+        .upsert({...basePayload,criado_em:new Date().toISOString()},
+          {onConflict:'data,nome_sessao',ignoreDuplicates:false})
     }
-    const dataBR=new Date(payload.data+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'})
-    const msg=`📅 ${existe?'Atualizada':'Nova sessão'}: ${payload.nome_sessao} — ${dataBR}${payload.horario?' às '+payload.horario:''}${payload.plenario?' · Pl.'+payload.plenario:''} · ${payload.consultores.map(c=>c.split(' ')[0]).join(', ')||'sem consultor'}`
+    const dataBR=new Date(basePayload.data+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'})
+    const msg=`📅 ${id?'Atualizada':'Nova sessão'}: ${basePayload.nome_sessao} — ${dataBR}${basePayload.horario?' às '+basePayload.horario:''}${basePayload.plenario?' · Pl.'+basePayload.plenario:''} · ${basePayload.consultores.map(c=>c.split(' ')[0]).join(', ')||'sem consultor'}`
     adicionarMensagemMural(msg,'comum',meuLogin!)
     try{
       await fetch(WEBHOOK,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-        evento:'agenda_sessao',acao:existe?'atualizado':'criado',...payload,
-        mensagem_whatsapp:payload.horario&&payload.consultores.length>0
-          ?`${payload.consultores.map(c=>`@${c.split(' ')[0]}`).join(' ')} — *${payload.nome_sessao}* às ${payload.horario}${payload.plenario?' · Plenário '+payload.plenario:''}${payload.descricao?'\n💬 '+payload.descricao:''}\n\nBoa sessão e lembre-se que você representa o setor. 🏛️`
+        evento:'agenda_sessao',acao:id?'atualizado':'criado',...basePayload,
+        mensagem_whatsapp:basePayload.horario&&basePayload.consultores.length>0
+          ?`${basePayload.consultores.map(c=>`@${c.split(' ')[0]}`).join(' ')} — *${basePayload.nome_sessao}* às ${basePayload.horario}${basePayload.plenario?' · Plenário '+basePayload.plenario:''}${basePayload.descricao?'\n💬 '+basePayload.descricao:''}\n\nBoa sessão e lembre-se que você representa o setor. 🏛️`
           :null,
         horario_envio_1h_antes:(()=>{
-          if(!payload.data||!payload.horario)return null
-          const[h,m]=payload.horario.split(':').map(Number)
-          const dt=new Date(`${payload.data}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00`)
+          if(!basePayload.data||!basePayload.horario)return null
+          const[h,m]=basePayload.horario.split(':').map(Number)
+          const dt=new Date(`${basePayload.data}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00`)
           dt.setHours(dt.getHours()-1);return dt.toISOString()
         })(),
         secretaria:meuLogin,

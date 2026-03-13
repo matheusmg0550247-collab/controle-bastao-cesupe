@@ -20,6 +20,7 @@ export interface ModalAtividade {
   proximoStatus?: string   // se vier de PainelStatus (troca de status)
   proximoFila?: boolean
   mostrarEscolhaApos?: boolean  // se true, após salvar pergunta: Bastão ou Indisponível?
+  avulso?: boolean              // se true, registro avulso sem vínculo com status
 }
 
 interface BastaoState {
@@ -191,20 +192,40 @@ export const useBastaoStore = create<BastaoState>((set, get) => ({
     if (equipe) {
       const fa = equipe === "EPROC" ? state.filaEproc : state.filaJpe; const enf = fa.includes(nome);
       if (manterNaFila && !enf) { if (equipe === "EPROC") newState.filaEproc = [...state.filaEproc, nome]; else newState.filaJpe = [...state.filaJpe, nome]; }
-      else if (!manterNaFila && enf) { if (equipe === "EPROC") newState.filaEproc = fa.filter(n => n !== nome); else newState.filaJpe = fa.filter(n => n !== nome); }
+      else if (!manterNaFila && enf) {
+        let novaFila = fa.filter(n => n !== nome);
+        // Limpa skip de quem saiu
+        const newSkip = { ...state.skipFlags, [nome]: false };
+        // Se saiu da posição 0 (tinha o bastão), resolve skips do novo primeiro
+        if (fa[0] === nome) {
+          while (novaFila.length > 0 && newSkip[novaFila[0]]) {
+            newSkip[novaFila[0]] = false;
+            novaFila = [...novaFila.slice(1), novaFila[0]];
+          }
+        }
+        newState.skipFlags = newSkip;
+        if (equipe === "EPROC") newState.filaEproc = novaFila; else newState.filaJpe = novaFila;
+      }
     }
     set(newState); get()._saveToDb(newState, `Status ${nome}: ${status}`); registrarMudancaStatus(nome, status, detalhe);
   },
   toggleFila: (nome) => {
     const eq = getEquipe(nome); if (!eq) return; const s = get();
     const fa = eq === "EPROC" ? s.filaEproc : s.filaJpe; const inQ = fa.includes(nome);
-    const nf = inQ ? fa.filter(n => n !== nome) : [...fa, nome];
+    let nf = inQ ? fa.filter(n => n !== nome) : [...fa, nome];
     const ns: Partial<BastaoState> = eq === "EPROC" ? { filaEproc: nf } : { filaJpe: nf };
     ns.statusTexto = { ...s.statusTexto, [nome]: inQ ? 'Indisponivel' : '' };
+    // Ao sair da fila, limpa o skip. Se estava na posição 0, resolve skip do novo primeiro
+    if (inQ) {
+      const newSkip = { ...s.skipFlags, [nome]: false };
+      if (fa[0] === nome) {
+        while (nf.length > 0 && newSkip[nf[0]]) { newSkip[nf[0]] = false; nf = [...nf.slice(1), nf[0]]; }
+        if (eq === "EPROC") ns.filaEproc = nf; else ns.filaJpe = nf;
+      }
+      ns.skipFlags = newSkip;
+    }
     set(ns); get()._saveToDb(ns, inQ ? `Removeu ${nome}` : `Colocou ${nome}`);
-    // Grava Bastão ao entrar na fila, fecha ao sair
     registrarMudancaStatus(nome, inQ ? 'Indisponivel' : '', '');
-    // Log na bastao_logs
     registrarBastaoLog(nome, eq, 'fila', inQ ? 'saida' : 'entrada');
   },
   toggleTelefone: (nome) => { const s = get(); const a = s.quickIndicators[nome] || { telefone: false, cafe: false }; const ns = { quickIndicators: { ...s.quickIndicators, [nome]: { ...a, telefone: !a.telefone, cafe: false } } }; set(ns); get()._saveToDb(ns, `Telefone ${nome}`); },
