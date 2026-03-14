@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useBastaoStore } from '../store/useBastaoStore'
 import { USUARIOS_SISTEMA } from '../constants'
 
