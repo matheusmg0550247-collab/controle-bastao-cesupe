@@ -452,20 +452,81 @@ function useConsultoresDisponiveis(data:string,ferias:Ferias[]):Set<string>{
 }
 
 // ─── Seletor de consultores com bloqueio de férias ────────────────────────────
-function SeletorConsultores({selecionados,onChange,bloqueados,label='Consultores'}:{
-  selecionados:string[];onChange:(v:string[])=>void;bloqueados:Set<string>;label?:string
+function SeletorConsultores({selecionados,onChange,bloqueados,label='Consultores',mostrarStats=false,weekStart,weekEnd}:{
+  selecionados:string[];onChange:(v:string[])=>void;bloqueados:Set<string>;label?:string;mostrarStats?:boolean;weekStart?:string;weekEnd?:string
 }){
+  const[hoveredCons,setHoveredCons]=useState<string|null>(null)
+  const[consStats,setConsStats]=useState<Record<string,{semana:number;total:number}>>({})
+
+  useEffect(()=>{
+    if(!mostrarStats)return
+    async function loadStats(){
+      const now=new Date();const dow=now.getDay()
+      const seg=new Date(now);seg.setDate(now.getDate()-(dow===0?6:dow-1))
+      const ws = weekStart ?? seg.toISOString().split('T')[0]
+      const weDefault=new Date(seg);weDefault.setDate(seg.getDate()+6)
+      const weStr = weekEnd ?? weDefault.toISOString().split('T')[0]
+      const[{data:semData},{data:totData}]=await Promise.all([
+        supabase.from('agenda_detalhes').select('consultores').gte('data',ws).lte('data',weStr).limit(2000),
+        supabase.from('agenda_detalhes').select('consultores').limit(10000),
+      ])
+      // Mapa fixo: nome como salvo no banco → nome em TODOS_CONSULTORES
+      const NOME_BANCO_PARA_SISTEMA: Record<string, string> = {
+        'Luiz Oliveira':        'Luiz Henrique',
+        'Jerry Neto':           'Jerry Marcos',
+        'Vanessa Santos':       'Vanessa Ligiane',
+        'Farley Juliano':       'Farley',
+        'Bruno Martins':        'Bruno Glaicon',
+        'Glayce Silva':         'Glayce Torres',
+        'Barbara Araujo':       'Barbara Mara',
+        'Igor Correa':          'Igor Dayrell',
+        'Michael Aguiar':       'Michael Douglas',
+        'Morôni Fagundes':      'Morôni',
+        'Leonardo Lacerda':     'Leonardo Damaceno',
+        'Isabela Homssi':       'Isabela Dias',
+        'Leandro Catharino':    'Leandro',
+        'Alex Silva':           'Alex Paulo',
+        'Fábio Sousa':          'Fábio Alves',
+        'Sarah Araujo':         'Sarah Leal',
+        'Gleis Rodrigues':      'Gleis',
+        'Marcelo Dutra':        'Marcelo dos Santos Dutra',
+        'Marcelo Guerra':       'Marcelo Pena Guerra',
+        'Douglas Gonçalves':    'Douglas De Souza',
+        'Douglas Silva':        'Douglas Paiva',
+      }
+
+      const stats:Record<string,{semana:number;total:number}>={};
+      (TODOS_CONSULTORES as string[]).forEach(c=>{stats[c]={semana:0,total:0}})
+
+      function resolverNome(raw: string): string | null {
+        if (stats[raw] !== undefined) return raw
+        const mapped = NOME_BANCO_PARA_SISTEMA[raw]
+        if (mapped && stats[mapped] !== undefined) return mapped
+        return null
+      }
+
+      semData?.forEach((r:any)=>{(r.consultores as string[]||[]).forEach((raw:string)=>{const n=resolverNome(raw);if(n)stats[n].semana++})})
+      totData?.forEach((r:any)=>{(r.consultores as string[]||[]).forEach((raw:string)=>{const n=resolverNome(raw);if(n)stats[n].total++})})
+      setConsStats(stats)
+    }
+    loadStats()
+  },[mostrarStats,weekStart,weekEnd])
+
+  const lista = TODOS_CONSULTORES as string[]
+  const st = hoveredCons ? consStats[hoveredCons] : null
   return(
     <div>
       <label className="block text-[10px] font-black text-gray-400 uppercase tracking-wide mb-1 mt-3">{label} ({selecionados.length})</label>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-1 max-h-40 overflow-y-auto border border-gray-100 rounded-xl p-2 bg-gray-50">
-        {TODOS_CONSULTORES.map(c=>{
+        {lista.map(c=>{
           const sel=selecionados.includes(c)
           const bloq=bloqueados.has(c)
           return(
             <button key={c} disabled={bloq&&!sel}
+              onMouseEnter={()=>mostrarStats&&setHoveredCons(c)}
+              onMouseLeave={()=>setHoveredCons(null)}
               onClick={()=>!bloq&&onChange(sel?selecionados.filter(x=>x!==c):[...selecionados,c])}
-              className={`text-left text-xs px-2 py-1.5 rounded-lg font-bold border transition-all flex items-center gap-1 ${
+              className={`w-full text-left text-xs px-2 py-1.5 rounded-lg font-bold border transition-all flex items-center gap-1 ${
                 bloq?'border-red-200 bg-red-50 text-red-400 cursor-not-allowed opacity-60':
                 sel?'border-violet-500 bg-violet-100 text-violet-700':
                 'border-gray-200 bg-white text-gray-600 hover:border-violet-300'
@@ -477,6 +538,357 @@ function SeletorConsultores({selecionados,onChange,bloqueados,label='Consultores
             </button>
           )
         })}
+      </div>
+      {hoveredCons&&mostrarStats&&st&&(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center pointer-events-none">
+          <div className="bg-gray-900 text-white rounded-2xl px-8 py-5 shadow-2xl text-center pointer-events-none border border-white/10">
+            <p className="text-sm font-black text-white mb-3">{hoveredCons}</p>
+            <div className="flex gap-6 justify-center">
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-2xl font-black text-yellow-300">{st.semana}</span>
+                <span className="text-[10px] font-bold text-yellow-200/70 uppercase tracking-wider">📅 Esta semana</span>
+              </div>
+              <div className="w-px bg-white/20"/>
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-2xl font-black text-blue-300">{st.total}</span>
+                <span className="text-[10px] font-bold text-blue-200/70 uppercase tracking-wider">📊 Total histórico</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Modal Sugestão de Sessões ────────────────────────────────────────────────
+function ModalSugestaoSessoes({ meuLogin, weekDays, weekStart, weekEndSun, onClose, onSalvar }: {
+  meuLogin: string; weekDays: Date[]; weekStart: string; weekEndSun: string
+  onClose: () => void; onSalvar: (sessoes: Omit<AgendaDetalhe,'id'|'criado_em'>[]) => Promise<void>
+}) {
+  const [semOffset,    setSemOffset]    = useState(0)
+  const [loading,      setLoading]      = useState(false)
+  const [salvando,     setSalvando]     = useState(false)
+  const [sugestoes,    setSugestoes]    = useState<(Omit<AgendaDetalhe,'id'|'criado_em'> & {_key:string})[]>([])
+  const [gerado,       setGerado]       = useState(false)
+  const [editIdx,      setEditIdx]      = useState<number|null>(null)
+
+  // Semana navegável dentro do modal
+  const modalMonday = useMemo(()=>{
+    const m = getMonday(new Date(weekStart+'T12:00:00'))
+    m.setDate(m.getDate() + semOffset * 7)
+    return m
+  },[weekStart, semOffset])
+  const modalWeekDays = useMemo(()=>getWeekDays(modalMonday),[modalMonday])
+  const modalStart = fmtLocal(modalWeekDays[0])
+  const modalEnd   = useMemo(()=>{ const s=new Date(modalMonday); s.setDate(modalMonday.getDate()+6); return fmtLocal(s) },[modalMonday])
+
+  const nomeEx = (n: string) => { const p = n.trim().split(' ').filter(Boolean); return p.length <= 1 ? n : p[0]+' '+p[p.length-1] }
+
+  async function gerarSugestao() {
+    setLoading(true)
+    try {
+      // Compute week range INSIDE the function to avoid stale closure
+      const _mon = getMonday(new Date(weekStart+'T12:00:00'))
+      _mon.setDate(_mon.getDate() + semOffset * 7)
+      const _days = getWeekDays(_mon)
+      const semIni = fmtLocal(_days[0])
+      const semFim = (() => { const s=new Date(_mon); s.setDate(_mon.getDate()+6); return fmtLocal(s) })()
+      const ini = semIni
+      const fim = semFim
+
+      // ── Equipes ──────────────────────────────────────────────────────────
+      const EQUIPE_EPROC_LIST = (EQUIPE_EPROC as string[])
+      const EQUIPE_JPE_LIST   = (EQUIPE_JPE   as string[])
+
+      // ── Mapa de padrão por sessão (baseado em histórico real) ─────────────
+      // 'E' = só EPROC, 'J' = só JPE, 'M' = mista (1 EPROC + 1 JPE)
+      const PADRAO_SESSAO: Record<string, 'E'|'J'|'M'> = {
+        // VIRTUAL → sempre EPROC
+        'VIRTUAL SESSÃO 3ª CÍVEL':'E','VIRTUAL SESSÃO 4ª CÍVEL ESPECIALIZADA':'E',
+        'VIRTUAL SESSÃO 5ª CÍVEL':'E','VIRTUAL SESSÃO 6ª CÍVEL':'E','VIRTUAL SESSÃO 7ª CÍVEL':'E',
+        'VIRTUAL SESSÃO 10ª CÍVEL':'E','VIRTUAL SESSÃO 12ª CÍVEL':'E','VIRTUAL SESSÃO 13ª CÍVEL':'E',
+        'VIRTUAL SESSÃO 14ª CÍVEL':'E','VIRTUAL SESSÃO 15ª CÍVEL':'E','VIRTUAL SESSÃO 16ª CÍVEL':'E',
+        'VIRTUAL SESSÃO 17ª CÍVEL':'E','VIRTUAL SESSÃO 21ª CÍVEL':'E','VIRTUAL SESSÃO 21ª CÍVEL ESP.':'E',
+        'VIRTUAL SESSÃO 1ª CÍVEL':'E','VIRTUAL SESSÃO 2ª CÍVEL':'E','VIRTUAL SESSÃO 4º NÚCLEO DE JUSTIÇA 4.0':'E',
+        // CRIMINAL → sempre JPE
+        'SESSÃO 1ª CRIMINAL':'J','SESSÃO 2ª CRIMINAL':'J','SESSÃO 3ª CRIMINAL':'J',
+        'SESSÃO 4ª CRIMINAL':'J','SESSÃO 5ª CRIMINAL':'J','SESSÃO 6ª CRIMINAL':'J',
+        'SESSÃO 7ª CRIMINAL':'J','SESSÃO 8ª CRIMINAL':'J','SESSÃO 9ª CRIMINAL ESP.':'J',
+        'SESSÃO 1º GRUPO CRIMINAL':'J','SESSÃO 2º GRUPO CRIMINAL':'J','SESSÃO 3º GRUPO CRIMINAL':'J',
+        // ÓRGÃO ESPECIAL / TRIBUNAL PLENO → JPE
+        'SESSÃO ÓRGÃO ESPECIAL':'J','SESSÃO TRIBUNAL PLENO':'J','SESSÃO CONSELHO DA MAGISTRATURA':'J',
+        // NÚCLEO DE JUSTIÇA (sem VIRTUAL) → JPE (Farley/Marina)
+        'SESSÃO NÚCLEO DE JUSTIÇA 4.0':'J','SESSÃO 1º NÚCLEO DE JUSTIÇA 4.0':'J',
+        'SESSÃO 2º NÚCLEO DE JUSTIÇA 4.0':'E','SESSÃO 3º NÚCLEO DE JUSTIÇA 4.0':'J',
+        'SESSÃO 4º NÚCLEO DE JUSTIÇA 4.0':'J','SESSÃO 5º NÚCLEO DE JUSTIÇA 4.0':'J',
+        'SESSÃO 6º NÚCLEO DE JUSTIÇA 4.0':'J','SESSÃO NÚCLEO DE JUST.':'J',
+        'SESSÃO 2ª NÚCLEO DE JUST.':'J','SESSÃO 4ª NÚCLEO DE JUST.':'J',
+        // CÍVEL puro JPE
+        'SESSÃO 3ª CÍVEL':'J','SESSÃO 10ª CÍVEL':'J','SESSÃO 12ª CÍVEL':'J',
+        'SESSÃO 15ª CÍVEL':'J','SESSÃO 17ª CÍVEL':'J','SESSÃO 21ª CÍVEL ESP.':'J',
+        'SESSÃO 4ª CÍVEL ESP.':'J','SESSÃO 8ª CÍVEL ESP.':'J',
+        // CÍVEL EPROC puro
+        'SESSÃO 16ª CÍVEL ESP.':'E',
+        // CÍVEL MISTA
+        'SESSÃO 1ª CÍVEL':'M','SESSÃO 2ª CÍVEL':'M','SESSÃO 5ª CÍVEL':'M',
+        'SESSÃO 6ª CÍVEL':'M','SESSÃO 8ª CÍVEL ESPECIALIZADA':'M','SESSÃO 9ª CÍVEL':'M',
+        'SESSÃO 11ª CÍVEL':'M','SESSÃO 13ª CÍVEL':'M','SESSÃO 14ª CÍVEL':'M',
+        'SESSÃO 18ª CÍVEL':'M','SESSÃO 19ª CÍVEL':'M','SESSÃO 20ª CÍVEL':'M',
+        'SESSÃO 21ª CÍVEL':'M',
+      }
+
+      function detectarPadrao(nomeSessao: string): 'E'|'J'|'M' {
+        const nome = nomeSessao.toUpperCase()
+        // Testa mapa exato primeiro
+        const exato = PADRAO_SESSAO[nomeSessao]
+        if (exato) return exato
+        // Fallback por regras de nome
+        if (nome.startsWith('VIRTUAL')) return 'E'
+        if (nome.includes('CRIMINAL') || nome.includes('GRUPO CRIMINAL')) return 'J'
+        if (nome.includes('ÓRGÃO ESPECIAL') || nome.includes('TRIBUNAL PLENO')) return 'J'
+        if (nome.includes('NÚCLEO') && !nome.startsWith('VIRTUAL')) return 'J'
+        return 'M' // CÍVEL genérico → mista por segurança
+      }
+
+      // 1. Verifica se já existem sessões no período
+      const { data: sessoesExistentes, count: totalExistentes } = await supabase
+        .from('agenda_detalhes').select('*', { count: 'exact', head: true })
+        .gte('data', ini).lte('data', fim)
+
+      if ((totalExistentes ?? 0) > 0) {
+        alert(`⚠️ Este período já possui ${totalExistentes} sessão(ões) cadastrada(s).\nA sugestão é apenas para semanas/dias sem sessões.`)
+        setLoading(false)
+        return
+      }
+
+      // 2. Busca padrão histórico: quais sessões ocorrem em quais dias da semana
+      //    e pesos para distribuição de consultores
+      const [{ data: histSessoes }, { data: semData }, { data: totData }] = await Promise.all([
+        supabase.from('agenda_detalhes').select('nome_sessao,horario,plenario,modalidade,setor,descricao,data').limit(10000),
+        supabase.from('agenda_detalhes').select('consultores').gte('data', semIni).lte('data', semFim).limit(2000),
+        supabase.from('agenda_detalhes').select('consultores').limit(10000),
+      ])
+
+      // Agrupa por (dia_semana + nome_sessao) contando frequência e extraindo horario/plenario/modalidade mais comum
+      const padraoMap: Record<string, {
+        count: number; horario: Record<string,number>; plenario: Record<string,number>;
+        modalidade: Record<string,number>; descricao: string
+      }> = {}
+
+      histSessoes?.forEach((r: any) => {
+        const dow = new Date(r.data + 'T12:00:00').getDay() // 1=seg..5=sex
+        if (dow < 1 || dow > 5) return
+        const key = `${dow}||${r.nome_sessao}`
+        if (!padraoMap[key]) padraoMap[key] = { count: 0, horario: {}, plenario: {}, modalidade: {}, descricao: r.descricao || '' }
+        padraoMap[key].count++
+        if (r.horario)    padraoMap[key].horario[r.horario]       = (padraoMap[key].horario[r.horario]       || 0) + 1
+        if (r.plenario)   padraoMap[key].plenario[r.plenario]     = (padraoMap[key].plenario[r.plenario]     || 0) + 1
+        if (r.modalidade) padraoMap[key].modalidade[r.modalidade] = (padraoMap[key].modalidade[r.modalidade] || 0) + 1
+      })
+
+      // Pega o valor mais frequente de um Record<string,number>
+      const maisFreq = (m: Record<string,number>) => Object.entries(m).sort((a,b)=>b[1]-a[1])[0]?.[0] ?? undefined
+
+      // Monta lista de sessões sugeridas por dia da semana
+      // Filtra sessões que ocorrem em pelo menos 2 semanas (frequência >= 2) para não incluir eventos únicos
+      const diasAlvo: Date[] = Array.from({length:5}, (_,i) => { const d=new Date(_days[0]); d.setDate(_days[0].getDate()+i); return d })
+
+      const sessoes: any[] = []
+      diasAlvo.forEach(d => {
+        const dow = d.getDay()
+        const dataStr = fmtLocal(d)
+        // Pega todas as sessões desse dia da semana, ordena por frequência desc
+        const sessDia = Object.entries(padraoMap)
+          .filter(([k, v]) => k.startsWith(dow + '||') && v.count >= 2)
+          .sort((a, b) => b[1].count - a[1].count)
+          .map(([k, v]) => ({
+            nome_sessao: k.split('||')[1],
+            horario: maisFreq(v.horario) ?? '13:30',
+            plenario: maisFreq(v.plenario),
+            modalidade: maisFreq(v.modalidade) ?? 'PRESENCIAL',
+            descricao: v.descricao,
+            data: dataStr,
+          }))
+        sessoes.push(...sessDia)
+      })
+
+      // Ordena por data e horário
+      sessoes.sort((a, b) => {
+        if (a.data !== b.data) return a.data.localeCompare(b.data)
+        return (a.horario || '').localeCompare(b.horario || '')
+      })
+
+      // ── Mapa de resolução de nomes banco → sistema ────────────────────────
+      const NOME_BANCO: Record<string, string> = {
+        'Luiz Oliveira':'Luiz Henrique','Jerry Neto':'Jerry Marcos','Vanessa Santos':'Vanessa Ligiane',
+        'Farley Juliano':'Farley','Bruno Martins':'Bruno Glaicon','Glayce Silva':'Glayce Torres',
+        'Barbara Araujo':'Barbara Mara','Igor Correa':'Igor Dayrell','Michael Aguiar':'Michael Douglas',
+        'Morôni Fagundes':'Morôni','Leonardo Lacerda':'Leonardo Damaceno','Isabela Homssi':'Isabela Dias',
+        'Leandro Catharino':'Leandro','Alex Silva':'Alex Paulo','Fábio Sousa':'Fábio Alves',
+        'Sarah Araujo':'Sarah Leal','Gleis Rodrigues':'Gleis','Marcelo Dutra':'Marcelo dos Santos Dutra',
+        'Marcelo Guerra':'Marcelo Pena Guerra','Douglas Gonçalves':'Douglas De Souza','Douglas Silva':'Douglas Paiva',
+      }
+      const resolver = (raw: string) => NOME_BANCO[raw] ?? raw
+
+      // ── Pesos por equipe ──────────────────────────────────────────────────
+      const semPeso: Record<string, number> = {}
+      const totPeso: Record<string, number> = {}
+      ;(TODOS_CONSULTORES as string[]).forEach(c => { semPeso[c] = 0; totPeso[c] = 0 })
+      semData?.forEach((r: any) => { (r.consultores as string[]||[]).forEach((raw: string) => { const n=resolver(raw); if(semPeso[n]!==undefined) semPeso[n]++ }) })
+      totData?.forEach((r: any) => { (r.consultores as string[]||[]).forEach((raw: string) => { const n=resolver(raw); if(totPeso[n]!==undefined) totPeso[n]++ }) })
+
+      const sortByCarga = (lista: string[]) => [...lista].sort((a, b) => {
+        const ds = semPeso[a] - semPeso[b]; if (ds !== 0) return ds
+        return totPeso[a] - totPeso[b]
+      })
+
+      const pickNext = (lista: string[], peso: Record<string,number>): string => {
+        const sorted = sortByCarga(lista)
+        const picked = sorted[0]
+        peso[picked] = (peso[picked] || 0) + 1
+        semPeso[picked]++
+        return picked
+      }
+
+      const resultado = sessoes.map((s: any, i: number) => {
+        const padrao = detectarPadrao(s.nome_sessao)
+        let consultoresSugeridos: string[]
+
+        if (padrao === 'E') {
+          consultoresSugeridos = [pickNext(sortByCarga(EQUIPE_EPROC_LIST), semPeso)]
+        } else if (padrao === 'J') {
+          consultoresSugeridos = [pickNext(sortByCarga(EQUIPE_JPE_LIST), semPeso)]
+        } else {
+          const eproc = pickNext(sortByCarga(EQUIPE_EPROC_LIST), semPeso)
+          const jpe   = pickNext(sortByCarga(EQUIPE_JPE_LIST), semPeso)
+          consultoresSugeridos = [eproc, jpe]
+        }
+
+        return {
+          _key: `sugestao_${i}_${Date.now()}`,
+          data: s.data, nome_sessao: s.nome_sessao, modalidade: s.modalidade,
+          horario: s.horario, plenario: s.plenario ?? undefined, descricao: s.descricao ?? undefined,
+          pauta: undefined, mesa: undefined, setor: undefined,
+          consultores: consultoresSugeridos, criado_por: meuLogin,
+        }
+      })
+
+      if (resultado.length === 0) {
+        alert('Não há padrão histórico suficiente para gerar sugestões para este período.\nTente uma semana com histórico.')
+        setLoading(false)
+        return
+      }
+
+      setSugestoes(resultado); setGerado(true)
+    } catch(e) { console.error(e); alert('Erro ao gerar sugestão.') }
+    setLoading(false)
+  }
+
+  async function confirmar() {
+    setSalvando(true)
+    await onSalvar(sugestoes.map(({ _key, ...s }) => s))
+    setSalvando(false); onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 z-[700] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
+        <div className="bg-gradient-to-r from-violet-600 to-purple-700 p-5 text-white flex justify-between items-start flex-shrink-0">
+          <div>
+            <h3 className="text-base font-black">💡 Sugestão de Distribuição</h3>
+            <p className="text-xs text-white/60 mt-0.5">Peso semanal primeiro · Total como desempate</p>
+          </div>
+          <button onClick={onClose} className="text-white/60 hover:text-white text-xl">✕</button>
+        </div>
+
+        <div className="p-5 overflow-y-auto flex-1 flex flex-col gap-4">
+          <div className="flex gap-3 items-center flex-wrap">
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={()=>setSemOffset(v=>v-1)} className="w-7 h-7 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 flex items-center justify-center text-sm font-bold">←</button>
+              <span className="text-xs font-bold text-gray-600 bg-gray-100 px-3 py-1.5 rounded-xl min-w-[160px] text-center">
+                {modalWeekDays[0]?.toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})} – {modalWeekDays[4]?.toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'})}
+              </span>
+              <button type="button" onClick={()=>setSemOffset(v=>v+1)} className="w-7 h-7 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 flex items-center justify-center text-sm font-bold">→</button>
+              {semOffset!==0&&<button type="button" onClick={()=>setSemOffset(0)} className="text-[10px] font-bold text-violet-600 bg-violet-50 px-2 py-1 rounded-lg">Hoje</button>}
+            </div>
+            <button type="button" onClick={gerarSugestao} disabled={loading}
+              className="ml-auto bg-violet-600 hover:bg-violet-700 text-white font-black px-5 py-2 rounded-xl text-sm disabled:opacity-50 flex items-center gap-2">
+              {loading ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin inline-block"/>Gerando...</> : '✨ Gerar Sugestão'}
+            </button>
+          </div>
+
+          {gerado && sugestoes.length === 0 && (
+            <p className="text-center text-gray-400 py-8 text-sm">Nenhuma sessão encontrada para o período.</p>
+          )}
+
+          {gerado && sugestoes.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-black text-gray-500 uppercase">{sugestoes.length} sessão(ões)</p>
+                <button onClick={() => { setSugestoes(prev => [...prev, { _key:`new_${Date.now()}`, data: escopo==='dia'?dataAlvo:weekStart, nome_sessao:'', modalidade:'PRESENCIAL', horario:'13:30', plenario:'', descricao:'', consultores:[], criado_por:meuLogin }]); setEditIdx(sugestoes.length) }}
+                  className="text-xs font-bold text-violet-600 bg-violet-50 border border-violet-200 px-3 py-1.5 rounded-lg hover:bg-violet-100">➕ Adicionar</button>
+              </div>
+              {sugestoes.map((s, i) => (
+                <div key={s._key} className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+                  {editIdx === i ? (
+                    <div className="flex flex-col gap-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div><label className="text-[10px] font-black text-gray-400 uppercase">Data</label>
+                          <input type="date" value={s.data} onChange={e => setSugestoes(prev => prev.map((x,j) => j===i?{...x,data:e.target.value}:x))}
+                            className="w-full border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold outline-none focus:ring-2 focus:ring-violet-400 mt-1"/></div>
+                        <div><label className="text-[10px] font-black text-gray-400 uppercase">Horário</label>
+                          <input type="time" value={s.horario||''} onChange={e => setSugestoes(prev => prev.map((x,j) => j===i?{...x,horario:e.target.value}:x))}
+                            className="w-full border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold outline-none focus:ring-2 focus:ring-violet-400 mt-1"/></div>
+                      </div>
+                      <div><label className="text-[10px] font-black text-gray-400 uppercase">Nome da Sessão</label>
+                        <input type="text" value={s.nome_sessao} onChange={e => setSugestoes(prev => prev.map((x,j) => j===i?{...x,nome_sessao:e.target.value.toUpperCase()}:x))}
+                          className="w-full border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold outline-none focus:ring-2 focus:ring-violet-400 mt-1"/></div>
+                      <div><label className="text-[10px] font-black text-gray-400 uppercase">Consultor</label>
+                        <select value={s.consultores[0]||''} onChange={e => setSugestoes(prev => prev.map((x,j) => j===i?{...x,consultores:e.target.value?[e.target.value]:[]}:x))}
+                          className="w-full border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold outline-none focus:ring-2 focus:ring-violet-400 mt-1 bg-white">
+                          <option value="">— nenhum —</option>
+                          {(TODOS_CONSULTORES as string[]).map(c => <option key={c} value={c}>{nomeEx(c)}</option>)}
+                        </select></div>
+                      <button onClick={() => setEditIdx(null)} className="text-xs font-bold bg-violet-600 text-white py-1.5 rounded-lg hover:bg-violet-700">✓ Confirmar</button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-black text-violet-800 truncate">{s.nome_sessao||'(nova sessão)'}</p>
+                        <div className="flex gap-2 text-[10px] text-gray-400 mt-0.5">
+                          <span>{new Date(s.data+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'})}</span>
+                          {s.horario&&<span>🕐 {s.horario}</span>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {s.consultores.length>0
+                          ? <div className="flex gap-1 flex-wrap">
+                              {s.consultores.map(cc => (
+                                <span key={cc} className="text-xs font-bold px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full">{nomeEx(cc)}</span>
+                              ))}
+                            </div>
+                          : <span className="text-xs text-gray-300 italic">sem consultor</span>}
+                        <button onClick={() => setEditIdx(i)} className="w-6 h-6 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-xs hover:bg-violet-50">✏️</button>
+                        <button onClick={() => setSugestoes(prev => prev.filter((_,j) => j!==i))} className="w-6 h-6 rounded-lg bg-red-50 border border-red-200 flex items-center justify-center text-xs text-red-500 hover:bg-red-100">✕</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {gerado && sugestoes.length > 0 && (
+          <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0">
+            <button onClick={confirmar} disabled={salvando}
+              className="flex-[2] bg-violet-600 hover:bg-violet-700 text-white font-black py-3 rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
+              {salvando ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin"/>Salvando...</> : `💾 Confirmar (${sugestoes.length} sessões)`}
+            </button>
+            <button onClick={onClose} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-3 rounded-xl">Cancelar</button>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -511,6 +923,7 @@ function AbaSessoes({canEdit,ferias,filtroInicial='Todos'}:{canEdit:boolean;feri
   const[consultores,setConsultores]=useState<string[]>([])
   const[dataForm,setDataForm]=useState('')
   const[salvando,setSalvando]=useState(false)
+  const[modalSugestao,setModalSugestao]=useState(false)
 
   const monday=useMemo(()=>{const m=getMonday(new Date());m.setDate(m.getDate()+offset*7);return m},[offset])
   const weekDays=useMemo(()=>getWeekDays(monday),[monday])
@@ -626,6 +1039,9 @@ function AbaSessoes({canEdit,ferias,filtroInicial='Todos'}:{canEdit:boolean;feri
           {canEdit&&<>
             <button onClick={copiarSemana} disabled={copiando} className="text-xs bg-violet-50 hover:bg-violet-100 text-violet-700 font-bold px-3 py-1.5 rounded-xl border border-violet-200 disabled:opacity-50">
               {copiando?'⏳':'📋'} Copiar sem. ant.
+            </button>
+            <button onClick={()=>setModalSugestao(true)} className="text-xs bg-yellow-400 hover:bg-yellow-300 text-yellow-900 font-black px-3 py-1.5 rounded-xl flex items-center gap-1">
+              💡 Sugestão
             </button>
             <button onClick={()=>abrirModal(fmtLocal(new Date()))} className="text-xs bg-violet-600 hover:bg-violet-700 text-white font-bold px-3 py-1.5 rounded-xl">+ Sessão</button>
           </>}
@@ -758,7 +1174,7 @@ function AbaSessoes({canEdit,ferias,filtroInicial='Todos'}:{canEdit:boolean;feri
               <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 mt-3">Observações</label>
               <textarea value={descricao} onChange={e=>setDescricao(e.target.value)} rows={2} className={`${inp} resize-none`} placeholder="Detalhes, link, local..."/>
 
-              <SeletorConsultores selecionados={consultores} onChange={setConsultores} bloqueados={bloqueados}/>
+              <SeletorConsultores selecionados={consultores} onChange={setConsultores} bloqueados={bloqueados} mostrarStats={true} weekStart={start} weekEnd={endSun}/>
             </div>
             <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0">
               <button onClick={handleSalvar} disabled={salvando} className="flex-[2] bg-violet-600 hover:bg-violet-700 text-white font-black py-3 rounded-xl disabled:opacity-50">
@@ -870,6 +1286,23 @@ function AbaSessoes({canEdit,ferias,filtroInicial='Todos'}:{canEdit:boolean;feri
           </div>
         </div>
       )}
+
+      {modalSugestao&&(
+        <ModalSugestaoSessoes
+          meuLogin={meuLogin||''}
+          weekDays={weekDays}
+          weekStart={start}
+          weekEndSun={endSun}
+          onClose={()=>setModalSugestao(false)}
+          onSalvar={async(sessoes)=>{
+            for(const s of sessoes){
+              await supabase.from('agenda_detalhes').insert({...s,criado_em:new Date().toISOString()})
+            }
+            const{data}=await supabase.from('agenda_detalhes').select('*').gte('data',start).lte('data',endSun).order('data').order('horario',{nullsFirst:false})
+            setSessoes(data||[])
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -899,6 +1332,10 @@ function AbaAtividades({canEdit,ferias,filtroInicial='Todos'}:{canEdit:boolean;f
   const[consultores,setConsultores]=useState<string[]>([])
   const[dataForm,setDataForm]=useState('')
   const[salvando,setSalvando]=useState(false)
+  const[verSuspensas,setVerSuspensas]=useState(false)
+  const[reativarModal,setReativarModal]=useState<AgendaAtividade|null>(null)
+  const[dataReativacao,setDataReativacao]=useState('')
+  const[itensSuspensos,setItensSuspensos]=useState<AgendaAtividade[]>([])
 
   const monday=useMemo(()=>{const m=getMonday(new Date());m.setDate(m.getDate()+offset*7);return m},[offset])
   const weekDays=useMemo(()=>getWeekDays(monday),[monday])
@@ -906,11 +1343,26 @@ function AbaAtividades({canEdit,ferias,filtroInicial='Todos'}:{canEdit:boolean;f
   const endSun=useMemo(()=>{const s=new Date(monday);s.setDate(monday.getDate()+6);return fmtLocal(s)},[monday])
   const bloqueados=useConsultoresDisponiveis(dataForm,ferias)
 
-  useEffect(()=>{
+  async function loadSuspensas(){
+    const{data}=await supabase.from('agenda_atividades').select('*').eq('suspenso',true).order('tipo')
+    setItensSuspensos(data||[])
+  }
+
+  async function loadItens(){
     setLoading(true)
-    supabase.from('agenda_atividades').select('*').gte('data',start).lte('data',endSun).order('data').order('tipo')
-      .then(({data})=>{setItens(data||[]);setLoading(false)})
-  },[start,endSun])
+    const{data}=await supabase.from('agenda_atividades').select('*').gte('data',start).lte('data',endSun).order('data').order('tipo')
+    setItens(data||[]);setLoading(false)
+  }
+
+  useEffect(()=>{ loadItens() },[start,endSun])
+  useEffect(()=>{ loadSuspensas() },[])
+
+  async function handleReativar(){
+    if(!reativarModal||!dataReativacao){alert('Informe a data!');return}
+    await supabase.from('agenda_atividades').update({suspenso:false,data:dataReativacao,data_reativacao:null}).eq('id',reativarModal.id)
+    setReativarModal(null);setDataReativacao('')
+    await Promise.all([loadItens(), loadSuspensas()])
+  }
 
   function abrirModal(data:string,item?:AgendaAtividade){
     setDataForm(item?.data??data); setTipoSel(item?.tipo??''); setTipoFiltro('')
@@ -943,6 +1395,11 @@ function AbaAtividades({canEdit,ferias,filtroInicial='Todos'}:{canEdit:boolean;f
     setItens(i=>i.filter(x=>x.id!==id))
   }
 
+  async function handleSuspender(id:string){
+    await supabase.from('agenda_atividades').update({suspenso:true,data_reativacao:null}).eq('id',id)
+    await Promise.all([loadItens(), loadSuspensas()])
+  }
+
   async function copiarSemana(){
     setCopiando(true)
     const antStart=fmtLocal(new Date(new Date(monday).setDate(monday.getDate()-7)))
@@ -967,6 +1424,7 @@ function AbaAtividades({canEdit,ferias,filtroInicial='Todos'}:{canEdit:boolean;f
     const map:Record<string,AgendaAtividade[]>={}
     for(const d of weekDays)map[fmtLocal(d)]=[]
     for(const it of itens){
+      if((it as any).suspenso)continue
       if(!map[it.data])continue
       if(!matchConsultor(it.consultores,filtro))continue
       map[it.data].push(it)
@@ -979,6 +1437,38 @@ function AbaAtividades({canEdit,ferias,filtroInicial='Todos'}:{canEdit:boolean;f
 
   return(
     <div>
+      {/* ── Seção Suspensas (sempre visível, independente da semana) ── */}
+      {itensSuspensos.length>0&&(
+        <div className="border border-yellow-200 rounded-2xl overflow-hidden mb-4">
+          <button onClick={()=>setVerSuspensas(v=>!v)}
+            className="w-full flex items-center justify-between px-5 py-3 bg-yellow-50 hover:bg-yellow-100 transition-colors text-left">
+            <span className="text-sm font-black text-yellow-700">⏸️ Atividades suspensas ({itensSuspensos.length})</span>
+            <span className="text-yellow-500">{verSuspensas?'▲':'▼'}</span>
+          </button>
+          {verSuspensas&&(
+            <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+              {itensSuspensos.map(it=>{
+                const cfg=getCfgAtv(it.tipo)
+                return(
+                  <div key={it.id} className={`border-2 rounded-2xl p-3 opacity-70 ${cfg.bg} ${cfg.border}`}>
+                    <p className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${cfg.badge} mb-1 inline-block`}>{cfg.icon} {it.tipo}</p>
+                    <div className="flex flex-wrap gap-0.5 mb-2">
+                      {it.consultores.map(cc=><span key={cc} className="text-[10px] font-bold px-1 rounded bg-white/70">{cc.split(' ')[0]}</span>)}
+                    </div>
+                    {(meuLogin==='Brenda'||meuLogin==='Farley')&&(
+                      <button onClick={()=>{setReativarModal(it);setDataReativacao('')}}
+                        className="w-full text-[10px] font-black bg-green-500 hover:bg-green-600 text-white py-1.5 rounded-xl transition-colors">
+                        ▶️ Reativar
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
         <div className="flex items-center gap-2">
           <button onClick={()=>setOffset(v=>v-1)} className="w-8 h-8 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 flex items-center justify-center font-bold">←</button>
@@ -1026,7 +1516,12 @@ function AbaAtividades({canEdit,ferias,filtroInicial='Todos'}:{canEdit:boolean;f
                           <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${cfg.badge}`}>{cfg.icon} {a.tipo}</span>
                           {(a as any).horario&&<span className="text-[10px] font-bold bg-white border border-gray-200 px-1.5 py-0.5 rounded-full text-gray-600">🕐 {(a as any).horario}</span>}
                         </div>
-                          {canEdit&&<button onClick={e=>{e.stopPropagation();handleDeletar(a.id)}} className="w-4 h-4 rounded text-[9px] text-red-400 hover:text-red-600 flex items-center justify-center">✕</button>}
+                          {canEdit&&(
+                            <div className="flex gap-1 flex-shrink-0">
+                              {(meuLogin==='Brenda'||meuLogin==='Farley')&&<button onClick={e=>{e.stopPropagation();handleSuspender(a.id)}} className="w-4 h-4 rounded text-[9px] text-yellow-500 hover:text-yellow-700 flex items-center justify-center" title="Suspender">⏸</button>}
+                              <button onClick={e=>{e.stopPropagation();handleDeletar(a.id)}} className="w-4 h-4 rounded text-[9px] text-red-400 hover:text-red-600 flex items-center justify-center">✕</button>
+                            </div>
+                          )}
                         </div>
                         {(a as any).setor&&<p className="text-[10px] font-bold text-indigo-600 mt-0.5">📍 {(a as any).setor}</p>}
                         {a.observacao&&<p className="text-[10px] text-gray-500 mt-1 italic">{a.observacao}</p>}
@@ -1116,40 +1611,6 @@ function AbaAtividades({canEdit,ferias,filtroInicial='Todos'}:{canEdit:boolean;f
               <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 mt-3">Horário (opcional)</label>
               <input type="time" value={horarioAtv} onChange={e=>setHorarioAtv(e.target.value)} className={inp}/>
 
-              <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 mt-3">Cartório / Gabinete (opcional)</label>
-              {!setorManual?(
-                <>
-                  <div className="flex gap-1 mb-1">
-                    <input type="text" value={setorFiltro}
-                      onChange={e=>{setSetorFiltro(e.target.value);setShowSetorDD(true)}}
-                      className={inp+' flex-1 !mb-0'} placeholder={setor||"Buscar cartório ou gabinete..."}/>
-                    {setor&&<button onClick={()=>{setSetor('');setSetorFiltro('');setShowSetorDD(false)}}
-                      className="text-gray-400 hover:text-red-500 px-2 text-sm font-bold flex-shrink-0">✕</button>}
-                  </div>
-                  {setor&&!showSetorDD&&<p className="text-[10px] text-blue-600 font-bold mb-1">📍 {setor}</p>}
-                  {showSetorDD&&(
-                    <div className="border border-gray-200 rounded-xl overflow-hidden max-h-36 overflow-y-auto shadow-md mb-1 z-10 relative bg-white">
-                      {(setorFiltro?GABINETES_2GRAU.filter(g=>g.toLowerCase().includes(setorFiltro.toLowerCase())):GABINETES_2GRAU).slice(0,20).map(g=>(
-                        <button key={g} onClick={()=>{setSetor(g);setSetorFiltro('');setShowSetorDD(false)}}
-                          className="w-full text-left px-3 py-1.5 text-xs font-bold hover:bg-blue-50 hover:text-blue-700 border-b border-gray-50 last:border-0">{g}</button>
-                      ))}
-                    </div>
-                  )}
-                  <button onClick={()=>{setSetorManual(true);setSetor('');setSetorFiltro('');setShowSetorDD(false)}}
-                    className="text-[10px] text-blue-600 font-bold mb-2 block hover:underline">+ Digitar manualmente</button>
-                </>
-              ):(
-                <>
-                  <div className="flex gap-1 mb-1">
-                    <input type="text" value={setor} onChange={e=>setSetor(e.target.value)}
-                      className={inp+' flex-1 !mb-0'} placeholder="Digite o nome do local..." autoFocus/>
-                    {setor&&<button onClick={()=>setSetor('')}
-                      className="text-gray-400 hover:text-red-500 px-2 text-sm font-bold flex-shrink-0">✕</button>}
-                  </div>
-                  <button onClick={()=>{setSetorManual(false);setSetor('');setSetorFiltro('')}}
-                    className="text-[10px] text-gray-400 font-bold mb-2 block hover:underline">← Voltar para lista</button>
-                </>
-              )}
               <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 mt-3">Observação</label>
               <textarea value={observacao} onChange={e=>setObservacao(e.target.value)} rows={2}
                 className={`${inp} resize-none`} placeholder="Detalhes..."/>
@@ -1161,6 +1622,30 @@ function AbaAtividades({canEdit,ferias,filtroInicial='Todos'}:{canEdit:boolean;f
                 {salvando?'Salvando...':'💾 Salvar'}
               </button>
               <button onClick={()=>setModal(null)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-3 rounded-xl">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal reativar */}
+      {reativarModal&&(
+        <div className="fixed inset-0 z-[700] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={()=>setReativarModal(null)}>
+          <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6" onClick={e=>e.stopPropagation()}>
+            <h3 className="text-base font-black text-gray-800 mb-1">▶️ Reativar atividade</h3>
+            <p className="text-sm text-gray-500 mb-4">{reativarModal.tipo}</p>
+            <label className="block text-xs font-black text-gray-400 uppercase mb-1">Nova data</label>
+            <input type="date" value={dataReativacao} onChange={e=>setDataReativacao(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-green-400 mb-4"/>
+            <div className="flex gap-2">
+              <button onClick={handleReativar} disabled={!dataReativacao}
+                className="flex-1 bg-green-500 hover:bg-green-600 text-white font-black py-3 rounded-xl disabled:opacity-50">
+                ▶️ Reativar
+              </button>
+              <button onClick={()=>setReativarModal(null)}
+                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-3 rounded-xl">
+                Cancelar
+              </button>
             </div>
           </div>
         </div>

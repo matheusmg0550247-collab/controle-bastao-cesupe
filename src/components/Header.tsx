@@ -210,106 +210,14 @@ function ThumbnailMonitor({ onClick }: { onClick: () => void }) {
 
 // ── Modal principal ──
 function PixelOfficeModal({ onClose }: { onClose: () => void }) {
-  const [ytModal,  setYtModal]  = useState<{ id: string; nome: string } | null>(null)
-  const [card,     setCard]     = useState<string | null>(null)
-  const [matheusIdx,  setMatheusIdx]  = useState(0)
-  const [gilbertoIdx, setGilbertoIdx] = useState(0)
-  const [monBlink, setMonBlink] = useState(true)
 
-  const FALAS: Record<string, string[]> = {
-    matheus: [
-      'Reunião às 14h, alguém me salva? 📅',
-      'Já conferi o bastão hoje... 3x 🔥',
-      'Preciso terminar esse relatório...',
-      'Quem tocou no meu café?! ☕',
-      'Tô de olho em vocês 👀',
-      'Deploy na sexta? Boa sorte pra mim 🚀',
-      'Já são 17h, como?!',
-    ],
-    gilberto: [
-      'Alguém viu meu mouse? 🖱️',
-      'Chamado novo... mais um 😮‍💨',
-      'Isso é bug ou feature? 🤔',
-      'Precisamos conversar sobre isso...',
-      'Ótimo trabalho, equipe! 👏',
-      'Café da tarde, quem vem? ☕',
-      'Sistema fora de novo não, por favor',
-    ],
-  }
-  const [imgStyle, setImgStyle] = useState<{ left:number; top:number; w:number; h:number } | null>(null)
-  const imgRef = useRef<HTMLImageElement>(null)
-  const wrapRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const t = setInterval(() => setMonBlink(v => !v), 900)
-    return () => clearInterval(t)
-  }, [])
-
-  useEffect(() => {
-    const t = setInterval(() => setMatheusIdx(i => (i + 1) % FALAS.matheus.length), 4000)
-    return () => clearInterval(t)
-  }, [])
-
-  useEffect(() => {
-    const t = setInterval(() => setGilbertoIdx(i => (i + 1) % FALAS.gilberto.length), 5500)
-    return () => clearInterval(t)
-  }, [])
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { ytModal ? setYtModal(null) : onClose() } }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [ytModal, onClose])
+  }, [onClose])
 
-  // Calcula bounds reais da imagem (descontando barras pretas do objectFit:contain)
-  function calcImgBounds() {
-    const img = imgRef.current
-    const wrap = wrapRef.current
-    if (!img || !wrap || !img.naturalWidth) return null
-    const wrapRect = wrap.getBoundingClientRect()
-    const nat = img.naturalWidth / img.naturalHeight
-    const cont = wrapRect.width / wrapRect.height
-    let imgW: number, imgH: number, offsetX: number, offsetY: number
-    if (nat > cont) {
-      imgW = wrapRect.width; imgH = wrapRect.width / nat
-      offsetX = 0; offsetY = (wrapRect.height - imgH) / 2
-    } else {
-      imgH = wrapRect.height; imgW = wrapRect.height * nat
-      offsetX = (wrapRect.width - imgW) / 2; offsetY = 0
-    }
-    return { left: offsetX, top: offsetY, w: imgW, h: imgH }
-  }
-
-  function onImgLoad() { setImgStyle(calcImgBounds()) }
-  useEffect(() => {
-    const obs = new ResizeObserver(() => setImgStyle(calcImgBounds()))
-    if (wrapRef.current) obs.observe(wrapRef.current)
-    return () => obs.disconnect()
-  }, [])
-
-  // Converte % relativas à imagem → px absolutas no container
-  function pos(xPct: number, yPct: number) {
-    if (!imgStyle) return { display: 'none' as const }
-    return {
-      position: 'absolute' as const,
-      left: imgStyle.left + (xPct / 100) * imgStyle.w,
-      top:  imgStyle.top  + (yPct / 100) * imgStyle.h,
-      transform: 'translate(-50%, -50%)',
-    }
-  }
-
-  const PESSOAS = {
-    matheus: {
-      nome: 'Matheus', cargo: 'Coordenador COSINF',
-      equipe: 'Gestão', ramal: '2664', cor: '#4f46e5', emoji: '👓',
-      obs: 'Maçon • COSINF / CESUPE',
-    },
-    gilberto: {
-      nome: 'Gilberto Miranda', cargo: 'Gerente CESUPE',
-      equipe: 'Gestão', ramal: '2645', cor: '#4f46e5', emoji: '🧑‍💼',
-      obs: 'Gerente do CESUPE',
-    },
-  }
 
   return (
     <>
@@ -323,7 +231,7 @@ function PixelOfficeModal({ onClose }: { onClose: () => void }) {
 
       <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
         style={{ background:'rgba(0,0,0,0.88)', backdropFilter:'blur(6px)' }}
-        onClick={() => { if (!ytModal) onClose() }}>
+        onClick={() => onClose()}>
 
         <div className="relative w-full max-w-7xl rounded-3xl overflow-hidden shadow-2xl"
           style={{ border:'1px solid rgba(99,102,241,0.3)' }}
@@ -344,191 +252,18 @@ function PixelOfficeModal({ onClose }: { onClose: () => void }) {
             <button onClick={onClose} className="text-white/40 hover:text-white transition-colors text-lg font-bold">✕</button>
           </div>
 
-          {/* Container da imagem */}
-          <div ref={wrapRef} className="relative" style={{ background:'#0a0a18' }}>
-            <img
-              ref={imgRef}
-              src="/Office.png"
-              alt="Escritório CESUPE Pixel Art"
-              className="w-full"
-              style={{ display:'block', maxHeight:'88vh', objectFit:'contain' }}
-              draggable={false}
-              onLoad={onImgLoad}
+          {/* Container do jogo pixel art */}
+          <div className="relative" style={{ background:'#1a1a2e' }}>
+            <iframe
+              src="/cesupe_pixel_room.html"
+              title="CESUPE · Be More"
+              style={{ display:'block', width:'100%', height:'88vh', border:'none' }}
+              allow="autoplay"
             />
-
-            {/* Hotspot Matheus (careca) — 90.8%, 64.8% */}
-            <div style={{ ...pos(90.8, 64.8), width:40, height:40, cursor:'pointer', zIndex:20 }}
-              onMouseEnter={() => setCard('matheus')}
-              onMouseLeave={() => setCard(null)}>
-              <div className="w-full h-full rounded-full"
-                style={{ animation:'hsPulse 2s ease-in-out infinite',
-                  background:'rgba(99,102,241,0.35)', border:'2px solid rgba(99,102,241,0.7)' }} />
-            </div>
-
-            {/* Hotspot Gilberto (cabelo) — 61.9%, 69.6% */}
-            <div style={{ ...pos(61.9, 69.6), width:40, height:40, cursor:'pointer', zIndex:20 }}
-              onMouseEnter={() => setCard('gilberto')}
-              onMouseLeave={() => setCard(null)}>
-              <div className="w-full h-full rounded-full"
-                style={{ animation:'hsPulse 2s ease-in-out infinite 0.4s',
-                  background:'rgba(99,102,241,0.35)', border:'2px solid rgba(99,102,241,0.7)' }} />
-            </div>
-
-            {/* Monitor piscando → Sauron — 68.6%, 63.5% */}
-            <div style={{ ...pos(68.6, 63.5), width:30, height:22, cursor:'pointer', zIndex:20 }}
-              onMouseEnter={() => setYtModal({ id: SAURON_YT_ID, nome: '👁️ Sauron' })}>
-              <div className="w-full h-full rounded-sm flex items-center justify-center"
-                style={{
-                  background: monBlink ? 'rgba(0,255,65,0.15)' : 'rgba(0,255,65,0.02)',
-                  border: `1px solid rgba(0,255,65,${monBlink ? 0.5 : 0.1})`,
-                  boxShadow: monBlink ? '0 0 6px rgba(0,255,65,0.3)' : 'none',
-                  transition: 'all 0.5s',
-                  animation: 'monPulse 1.8s ease-in-out infinite',
-                }}>
-                <span style={{ fontSize:7, color:'#00ff41', fontFamily:'monospace' }}>▬▬</span>
-              </div>
-            </div>
-
-            {/* Tiamat → YouTube — 90.2%, 74.9% */}
-            <div style={{ ...pos(90.2, 74.9), width:32, height:32, cursor:'pointer', zIndex:20 }}
-              onMouseEnter={() => setYtModal({ id: TIAMAT_YT_ID, nome: '🐉 Tiamat' })}>
-              <div className="w-full h-full rounded-full flex items-center justify-center"
-                style={{ animation:'hsPulse 2.5s ease-in-out infinite 1s',
-                  background:'rgba(168,85,247,0.25)', border:'2px solid rgba(168,85,247,0.6)' }}>
-                <span style={{ fontSize:14 }}>✦</span>
-              </div>
-            </div>
-
-            {/* Balão Matheus — acima da cabeça */}
-            {imgStyle && (() => {  // Matheus sempre ativo
-              const p = pos(90.8, 57)
-              return (
-                <div key={matheusIdx} style={{ ...p, zIndex:40, pointerEvents:'none',
-                  animation:'balaoWobble 2s ease-in-out infinite' }}>
-                  <div style={{
-                    background:'white', borderRadius:14, padding:'8px 12px',
-                    boxShadow:'0 4px 20px rgba(0,0,0,0.4)',
-                    border:'2px solid #e0e0e0', maxWidth:180, position:'relative',
-                  }}>
-                    <p style={{ fontSize:12, fontWeight:700, color:'#1a1a2e', lineHeight:1.4, margin:0 }}>
-                      {FALAS.matheus[matheusIdx]}
-                    </p>
-                    {/* Rabinho do balão */}
-                    <div style={{
-                      position:'absolute', bottom:-10, left:'50%', transform:'translateX(-50%)',
-                      width:0, height:0,
-                      borderLeft:'8px solid transparent',
-                      borderRight:'8px solid transparent',
-                      borderTop:'10px solid white',
-                    }} />
-                    <div style={{
-                      position:'absolute', bottom:-13, left:'50%', transform:'translateX(-50%)',
-                      width:0, height:0,
-                      borderLeft:'10px solid transparent',
-                      borderRight:'10px solid transparent',
-                      borderTop:'12px solid #e0e0e0',
-                      zIndex:-1,
-                    }} />
-                  </div>
-                </div>
-              )
-            })()}
-
-            {/* Balão Gilberto — acima da cabeça */}
-            {imgStyle && (() => {  // Gilberto sempre ativo
-              const p = pos(61.9, 62)
-              return (
-                <div key={gilbertoIdx} style={{ ...p, zIndex:40, pointerEvents:'none',
-                  animation:'balaoWobble 2.3s ease-in-out infinite' }}>
-                  <div style={{
-                    background:'white', borderRadius:14, padding:'8px 12px',
-                    boxShadow:'0 4px 20px rgba(0,0,0,0.4)',
-                    border:'2px solid #e0e0e0', maxWidth:180, position:'relative',
-                  }}>
-                    <p style={{ fontSize:12, fontWeight:700, color:'#1a1a2e', lineHeight:1.4, margin:0 }}>
-                      {FALAS.gilberto[gilbertoIdx]}
-                    </p>
-                    <div style={{
-                      position:'absolute', bottom:-10, left:'50%', transform:'translateX(-50%)',
-                      width:0, height:0,
-                      borderLeft:'8px solid transparent',
-                      borderRight:'8px solid transparent',
-                      borderTop:'10px solid white',
-                    }} />
-                    <div style={{
-                      position:'absolute', bottom:-13, left:'50%', transform:'translateX(-50%)',
-                      width:0, height:0,
-                      borderLeft:'10px solid transparent',
-                      borderRight:'10px solid transparent',
-                      borderTop:'12px solid #e0e0e0',
-                      zIndex:-1,
-                    }} />
-                  </div>
-                </div>
-              )
-            })()}
-
-            {/* Card carômetro */}
-            {card && (() => {
-              const p = PESSOAS[card as keyof typeof PESSOAS]
-              const b = imgStyle
-              const cardLeft = b ? b.left + b.w * 0.5 : undefined
-              const cardTop  = b ? b.top + b.h - 10 : undefined
-              return (
-                <div className="absolute pointer-events-none z-30"
-                  style={{ left: cardLeft, top: cardTop, transform:'translateX(-50%) translateY(-100%)',
-                    animation:'cardIn 0.2s ease-out', minWidth:220 }}>
-                  <div style={{
-                    background:'rgba(10,8,32,0.55)',
-                    border:`2px solid ${p.cor}33`,
-                    borderRadius:14, padding:'12px 16px',
-                    backdropFilter:'blur(16px)',
-                    boxShadow:`0 0 20px ${p.cor}1a`,
-                  }}>
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="w-10 h-10 rounded-full flex items-center justify-center text-xl flex-shrink-0"
-                        style={{ background:`${p.cor}22`, border:`2px solid ${p.cor}55` }}>
-                        {p.emoji}
-                      </div>
-                      <div>
-                        <p className="text-white font-black text-sm leading-tight">{p.nome}</p>
-                        <p style={{ color:p.cor }} className="text-xs font-bold">{p.cargo}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between"
-                      style={{ borderTop:`1px solid ${p.cor}33`, paddingTop:8 }}>
-                      <span style={{ color:'rgba(255,255,255,0.5)' }} className="text-xs">{p.equipe}</span>
-                      <span style={{ color:'rgba(165,180,252,0.9)' }} className="text-xs font-mono font-bold">☎ {p.ramal}</span>
-                    </div>
-                    {p.obs && <p style={{ color:'rgba(255,255,255,0.35)' }} className="text-[10px] mt-1">{p.obs}</p>}
-                  </div>
-                </div>
-              )
-            })()}
-          </div>
+           </div>
         </div>
       </div>
 
-      {/* Modal YouTube */}
-      {ytModal && (
-        <div className="fixed inset-0 z-[10001] flex items-center justify-center"
-          style={{ background:'rgba(0,0,0,0.93)' }}
-          onClick={() => setYtModal(null)}>
-          <div className="rounded-2xl overflow-hidden shadow-2xl"
-            style={{ border:'1px solid rgba(255,255,255,0.1)' }}
-            onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-4 py-2"
-              style={{ background:'#0f0c29', borderBottom:'1px solid rgba(255,255,255,0.08)' }}>
-              <span className="text-white font-black text-sm">{ytModal.nome}</span>
-              <button onClick={() => setYtModal(null)} className="text-white/40 hover:text-white text-lg">✕</button>
-            </div>
-            <iframe width="560" height="315"
-              src={`https://www.youtube.com/embed/${ytModal.id}?autoplay=1`}
-              title={ytModal.nome} allow="autoplay; encrypted-media" allowFullScreen
-              style={{ display:'block' }} />
-          </div>
-        </div>
-      )}
     </>
   )
 }

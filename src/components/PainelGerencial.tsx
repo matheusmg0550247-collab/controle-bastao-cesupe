@@ -1449,7 +1449,7 @@ function AbaAuditoriaTempoReal() {
   const [expandido, setExpandido] = useState<string|null>(null)
   const [dataFiltro, setDataFiltro] = useState(hoje())
   const [modoComparacao, setModoComparacao] = useState(false)
-  const consultores = USUARIOS_SISTEMA.filter(u=>u.perfil==='Consultor' && u.nome!=='Claudia Luiza' && !u.nome.toLowerCase().includes('cláudia') && !u.nome.toLowerCase().includes('claudia')).map(u=>u.nome)
+  const consultores = USUARIOS_SISTEMA.filter(u=>u.perfil==='Consultor').map(u=>u.nome)
   const { filaEproc, filaJpe } = useBastaoStore()
   const naFila = new Set([...filaEproc, ...filaJpe])
   const isHoje = dataFiltro === hoje()

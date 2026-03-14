@@ -32,6 +32,7 @@ export function PainelAcoes() {
   const [atdDescricao,setAtdDescricao]= useState('')
   const [atdCanal,    setAtdCanal]    = useState('Whatsapp')
   const [atdDesfecho, setAtdDesfecho] = useState('Resolvido - Cesupe')
+  const [atdSolucao,  setAtdSolucao]  = useState('')
 
   const usuarioLogado = USUARIOS_SISTEMA.find(u => u.nome === meuLogin)
   const isSecretaria  = usuarioLogado?.perfil === 'Secretaria' || usuarioLogado?.perfil === 'Gestor'
@@ -44,7 +45,7 @@ export function PainelAcoes() {
   const resetAtd = () => {
     setAtdUsuario('Público Externo'); setAtdSetor(''); setAtdSistema('JPE')
     setAtdDescricao(''); setAtdCanal('Whatsapp'); setAtdDesfecho('Resolvido - Cesupe')
-    setMotivoNaoReg(''); setEtapa('escolha')
+    setAtdSolucao(''); setMotivoNaoReg(''); setEtapa('escolha')
   }
 
   const fecharModal = () => { resetAtd(); setModalAtendimentoPos(null) }
@@ -67,6 +68,7 @@ export function PainelAcoes() {
         data: hoje, consultor: modalAtendimentoPos.quemPassou,
         usuario: atdUsuario, nome_setor: atdSetor, sistema: atdSistema,
         descricao: atdDescricao, canal: atdCanal, desfecho: atdDesfecho, resumo: '',
+        solucao: atdSolucao || null,
       }).select('id').single()
       await atualizarRotacao('registrado', { atendimento_cesupe_id: atd?.id ?? null })
       alert('Atendimento registrado!')
@@ -268,6 +270,8 @@ export function PainelAcoes() {
                   <select value={atdCanal} onChange={e => setAtdCanal(e.target.value)} className={inputClass}>{CANAL_OPTIONS.map(o => <option key={o}>{o}</option>)}</select>
                   <label className={labelClass}>Desfecho:</label>
                   <select value={atdDesfecho} onChange={e => setAtdDesfecho(e.target.value)} className={inputClass}>{DESFECHO_OPTIONS.map(o => <option key={o}>{o}</option>)}</select>
+                  <label className={labelClass}>Solução aplicada: <span className="text-gray-400 font-normal">(opcional)</span></label>
+                  <textarea value={atdSolucao} onChange={e => setAtdSolucao(e.target.value)} rows={2} className={`${inputClass} resize-none`} placeholder="Descreva a solução aplicada..." />
                   <div className="flex gap-2 mt-5">
                     <button disabled={loadingAtd || !atdDescricao.trim()} onClick={handleSalvarAtendimento} className="flex-[2] bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-xl disabled:opacity-50 transition-all">
                       {loadingAtd ? 'Salvando...' : '💾 Salvar Atendimento'}

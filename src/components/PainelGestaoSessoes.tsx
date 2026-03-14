@@ -8,6 +8,8 @@ interface AgendaDetalhe {
   id: string; data: string; nome_sessao: string; modalidade?: string
   horario?: string; plenario?: string; descricao?: string
   pauta?: number; mesa?: number; consultores: string[]
+  setor?: string
+  suspenso?: boolean; data_reativacao?: string | null
   criado_por: string; criado_em: string
 }
 interface AtividadeDia { atividade: string; consultores: string[] }
@@ -80,6 +82,13 @@ function fmtLocal(d:Date){return`${d.getFullYear()}-${String(d.getMonth()+1).pad
 const DIAS_PT:Record<number,string>={1:'Segunda-feira',2:'Terça-feira',3:'Quarta-feira',4:'Quinta-feira',5:'Sexta-feira'}
 const WEBHOOK='https://matheusgomes12.app.n8n.cloud/webhook/01cc0578-4e51-45f5-9351-21380289bc86'
 
+// Detecta erro de constraint única do Postgres/Supabase em qualquer formato
+const isDuplicate = (e: any) =>
+  e?.code === '23505' || e?.code === '409' ||
+  String(e?.message).toLowerCase().includes('duplicate') ||
+  String(e?.message).toLowerCase().includes('unique') ||
+  String(e?.details).toLowerCase().includes('already exists')
+
 function nomeExibicao(nome: string): string {
   const p = nome.trim().split(' ').filter(Boolean)
   if (p.length <= 1) return nome
@@ -135,7 +144,7 @@ function Popover({item,onClose}:{item:AgendaDetalhe;onClose:()=>void}){
 }
 
 // ─── Card de sessão ───────────────────────────────────────────────────────────
-function CardSessao({item,canEdit,onEdit,onDelete}:{item:AgendaDetalhe;canEdit:boolean;onEdit:()=>void;onDelete:()=>void}){
+function CardSessao({item,canEdit,onEdit,onDelete,onSuspend}:{item:AgendaDetalhe;canEdit:boolean;onEdit:()=>void;onDelete:()=>void;onSuspend?:()=>void}){
   const[popover,setPopover]=useState(false)
   const cor=getCor(item.modalidade)
   return(
@@ -149,6 +158,7 @@ function CardSessao({item,canEdit,onEdit,onDelete}:{item:AgendaDetalhe;canEdit:b
           {canEdit&&(
             <div className="flex gap-1 flex-shrink-0">
               <button onClick={e=>{e.stopPropagation();onEdit()}} className="w-6 h-6 rounded-lg bg-white/70 hover:bg-white border border-gray-200 flex items-center justify-center text-xs" title="Editar">✏️</button>
+              {onSuspend&&<button onClick={e=>{e.stopPropagation();onSuspend()}} className="w-6 h-6 rounded-lg bg-yellow-50 hover:bg-yellow-100 border border-yellow-200 flex items-center justify-center text-xs text-yellow-600" title="Suspender">⏸</button>}
               <button onClick={e=>{e.stopPropagation();onDelete()}} className="w-6 h-6 rounded-lg bg-red-50 hover:bg-red-100 border border-red-200 flex items-center justify-center text-xs text-red-500" title="Excluir">✕</button>
             </div>
           )}
@@ -175,7 +185,7 @@ function CardSessao({item,canEdit,onEdit,onDelete}:{item:AgendaDetalhe;canEdit:b
 // ─── Modal adicionar/editar ───────────────────────────────────────────────────
 function ModalSessao({data,item,onSave,onClose,meuLogin}:{
   data:string;item?:AgendaDetalhe;
-  onSave:(p:Omit<AgendaDetalhe,'criado_em'>&{id?:number})=>void;
+  onSave:(p:Omit<AgendaDetalhe,'criado_em'>&{id?:string})=>void;
   onClose:()=>void;meuLogin:string
 }){
   const isNew=!item
@@ -187,14 +197,37 @@ function ModalSessao({data,item,onSave,onClose,meuLogin}:{
   const[descricao,setDescricao]=useState(item?.descricao??'')
   const[pauta,setPauta]=useState(String(item?.pauta??''))
   const[mesa,setMesa]=useState(String(item?.mesa??''))
+  const[setor,setSetor]=useState(item?.setor??'')
   const[consultores,setConsultores]=useState<string[]>(item?.consultores??[])
   const[dataItem,setDataItem]=useState(item?.data??data)
+  const[hoveredCons,setHoveredCons]=useState<string|null>(null)
+  const[consStats,setConsStats]=useState<Record<string,{semana:number;total:number}>>({})
+
+  useEffect(()=>{
+    async function loadStats(){
+      const now=new Date();const dow=now.getDay()
+      const seg=new Date(now);seg.setDate(now.getDate()-(dow===0?6:dow-1))
+      const ws=seg.toISOString().split('T')[0]
+      const we=new Date(seg);we.setDate(seg.getDate()+6);const weStr=we.toISOString().split('T')[0]
+      const[{data:semData},{data:totData}]=await Promise.all([
+        supabase.from('agenda_detalhes').select('consultores').gte('data',ws).lte('data',weStr).limit(500),
+        supabase.from('agenda_detalhes').select('consultores').limit(10000),
+      ])
+      const stats:Record<string,{semana:number;total:number}>={};
+      (TODOS_CONSULTORES as string[]).forEach(c=>{stats[c]={semana:0,total:0}})
+      semData?.forEach((r:any)=>{(r.consultores as string[]||[]).forEach(c=>{if(stats[c])stats[c].semana++})})
+      totData?.forEach((r:any)=>{(r.consultores as string[]||[]).forEach(c=>{if(stats[c])stats[c].total++})})
+      setConsStats(stats)
+    }
+    loadStats()
+  },[])
 
   const cat=useMemo(()=>SESSOES_CATALOGO.filter(s=>s.toLowerCase().includes(nomeFiltro.toLowerCase())),[nomeFiltro])
 
   const selecionarCat=(nome:string)=>{
     setNomeSessao(nome);setNomeFiltro('')
-    setModalidade(MODALIDADE_PADRAO(nome))
+    const mod=MODALIDADE_PADRAO(nome)
+    setModalidade(mod)
     if(!horario)setHorario(HORARIOS_PADRAO[nome]??HORARIOS_PADRAO[nome.replace('VIRTUAL ','')]??'09:00')
     if(!plenario)setPlenario(PLENARIOS_PADRAO[nome]??PLENARIOS_PADRAO[nome.replace('VIRTUAL ','')]??'')
   }
@@ -250,19 +283,37 @@ function ModalSessao({data,item,onSave,onClose,meuLogin}:{
             <div><label className={lbl}>Mesa</label><input type="number" value={mesa} onChange={e=>setMesa(e.target.value)} className={inp} min="0"/></div>
           </div>
 
+          <label className={lbl}>Cartório / Gabinete (opcional)</label>
+          <input type="text" value={setor} onChange={e=>setSetor(e.target.value)}
+            className={inp} placeholder="Ex: 3ª Vara Cível, Gabinete Des. João..."/>
+
           <label className={lbl}>Observações</label>
           <textarea value={descricao} onChange={e=>setDescricao(e.target.value)} rows={2}
             className={`${inp} resize-none`} placeholder="Detalhes, link, local..."/>
 
           <label className={lbl}>Consultores ({consultores.length})</label>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-44 overflow-y-auto border border-gray-100 rounded-xl p-2 bg-gray-50">
-            {TODOS_CONSULTORES.map(c=>{
+            {(TODOS_CONSULTORES as string[]).map(c=>{
               const sel=consultores.includes(c)
+              const st=consStats[c]
               return(
-                <button key={c} onClick={()=>setConsultores(prev=>prev.includes(c)?prev.filter(x=>x!==c):[...prev,c])}
-                  className={`text-left text-xs px-2.5 py-1.5 rounded-lg font-bold border transition-all ${sel?'border-violet-500 bg-violet-100 text-violet-700':'border-gray-200 bg-white text-gray-600 hover:border-violet-300'}`}>
-                  {sel&&'✓ '}{c.split(' ')[0]} {c.split(' ').slice(-1)[0]}
-                </button>
+                <div key={c} className="relative">
+                  <button
+                    onMouseEnter={()=>setHoveredCons(c)}
+                    onMouseLeave={()=>setHoveredCons(null)}
+                    onClick={()=>setConsultores(prev=>prev.includes(c)?prev.filter(x=>x!==c):[...prev,c])}
+                    className={`w-full text-left text-xs px-2.5 py-1.5 rounded-lg font-bold border transition-all ${sel?'border-violet-500 bg-violet-100 text-violet-700':'border-gray-200 bg-white text-gray-600 hover:border-violet-300'}`}>
+                    {sel&&'✓ '}{c.split(' ')[0]} {c.split(' ').slice(-1)[0]}
+                  </button>
+                  {hoveredCons===c&&st&&(
+                    <div className="absolute z-[500] bottom-full left-0 mb-1 bg-gray-900 text-white text-[10px] font-bold rounded-xl px-3 py-2 whitespace-nowrap shadow-xl pointer-events-none">
+                      <div className="flex gap-3">
+                        <span className="text-yellow-300">📅 Semana: <b>{st.semana}</b></span>
+                        <span className="text-blue-300">📊 Total: <b>{st.total}</b></span>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )
             })}
           </div>
@@ -284,12 +335,254 @@ function ModalSessao({data,item,onSave,onClose,meuLogin}:{
             onSave({id:item?.id,data:dataItem,nome_sessao:nomeSessao.trim().toUpperCase(),modalidade,
               horario:horario||undefined,plenario:plenario||undefined,descricao:descricao.trim()||undefined,
               pauta:pauta?Number(pauta):undefined,mesa:mesa?Number(mesa):undefined,
+              setor:setor.trim()||undefined,
               consultores,criado_por:meuLogin})
           }} className="flex-[2] bg-violet-600 hover:bg-violet-700 text-white font-black py-3 rounded-xl">
             💾 Salvar
           </button>
           <button onClick={onClose} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-3 rounded-xl">Cancelar</button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Modal Sugestão ───────────────────────────────────────────────────────────
+function ModalSugestao({ meuLogin, weekDays, weekStart, weekEndSun, onClose, onSalvar }: {
+  meuLogin: string; weekDays: Date[]; weekStart: string; weekEndSun: string
+  onClose: () => void; onSalvar: (sessoes: Omit<AgendaDetalhe,'id'|'criado_em'>[]) => Promise<void>
+}) {
+  const [escopo,      setEscopo]      = useState<'semana'|'dia'>('semana')
+  const [dataAlvo,    setDataAlvo]    = useState(weekDays[0] ? weekStart : '')
+  const [loading,     setLoading]     = useState(false)
+  const [salvando,    setSalvando]    = useState(false)
+  const [sugestoes,   setSugestoes]   = useState<(Omit<AgendaDetalhe,'id'|'criado_em'> & {_key:string; editando?:boolean})[]>([])
+  const [gerado,      setGerado]      = useState(false)
+  const [editIdx,     setEditIdx]     = useState<number|null>(null)
+  const [addData,     setAddData]     = useState(weekStart)
+
+  const CONS_LISTA = TODOS_CONSULTORES as string[]
+
+  async function gerarSugestao() {
+    setLoading(true)
+    try {
+      // 1. Busca sessões do escopo
+      const ini = escopo === 'dia' ? dataAlvo : weekStart
+      const fim = escopo === 'dia' ? dataAlvo : weekEndSun
+      const { data: sessoes } = await supabase.from('agenda_detalhes')
+        .select('*').gte('data', ini).lte('data', fim).order('data').order('horario', { nullsFirst: false })
+
+      // 2. Busca histórico para detectar consultores de manhã
+      const { data: hist } = await supabase.from('agenda_detalhes')
+        .select('consultores,horario').limit(5000)
+
+      // 3. Busca pesos: contagem semanal e total
+      const [{ data: semData }, { data: totData }] = await Promise.all([
+        supabase.from('agenda_detalhes').select('consultores').gte('data', weekStart).lte('data', weekEndSun).limit(500),
+        supabase.from('agenda_detalhes').select('consultores').limit(10000),
+      ])
+
+      // Calcula consultores de manhã (horario < 12:00)
+      const manhaCount: Record<string, number> = {}
+      CONS_LISTA.forEach(c => { manhaCount[c] = 0 })
+      hist?.forEach((r: any) => {
+        const h = r.horario || ''
+        const hora = parseInt(h.split(':')[0] || '13')
+        if (hora < 12) {
+          ;(r.consultores as string[] || []).forEach((c: string) => {
+            if (manhaCount[c] !== undefined) manhaCount[c]++
+          })
+        }
+      })
+      const maxManha = Math.max(...Object.values(manhaCount), 1)
+      const consultoresManha = CONS_LISTA.filter(c => manhaCount[c] > maxManha * 0.2).sort((a,b) => manhaCount[b] - manhaCount[a])
+
+      // Calcula pesos semanal e total
+      const semPeso: Record<string, number> = {}
+      const totPeso: Record<string, number> = {}
+      CONS_LISTA.forEach(c => { semPeso[c] = 0; totPeso[c] = 0 })
+      semData?.forEach((r: any) => { (r.consultores as string[] || []).forEach((c: string) => { if (semPeso[c] !== undefined) semPeso[c]++ }) })
+      totData?.forEach((r: any) => { (r.consultores as string[] || []).forEach((c: string) => { if (totPeso[c] !== undefined) totPeso[c]++ }) })
+
+      // Ordena consultores por peso (menor semana primeiro, total como desempate)
+      const sortByCarga = (lista: string[]) => [...lista].sort((a,b) => {
+        const ds = semPeso[a] - semPeso[b]; if (ds !== 0) return ds
+        return totPeso[a] - totPeso[b]
+      })
+
+      // Rodízio manhã
+      let idxManha = 0
+      const sortedManha = consultoresManha.length > 0 ? sortByCarga(consultoresManha) : sortByCarga(CONS_LISTA)
+      const sortedGeral = sortByCarga(CONS_LISTA)
+      let idxGeral = 0
+
+      const resultado: (Omit<AgendaDetalhe,'id'|'criado_em'> & {_key:string})[] = (sessoes || []).map((s: any, i: number) => {
+        const hora = parseInt((s.horario || '13').split(':')[0])
+        const ehManha = hora < 12
+        let consultor: string
+        if (ehManha && sortedManha.length > 0) {
+          consultor = sortedManha[idxManha % sortedManha.length]
+          idxManha++; semPeso[consultor]++
+        } else {
+          consultor = sortedGeral[idxGeral % sortedGeral.length]
+          idxGeral++; semPeso[consultor]++
+        }
+        return {
+          _key: `${s.id}_${i}`,
+          data: s.data, nome_sessao: s.nome_sessao,
+          modalidade: s.modalidade, horario: s.horario, plenario: s.plenario,
+          descricao: s.descricao, pauta: s.pauta, mesa: s.mesa, setor: s.setor,
+          consultores: [consultor], criado_por: meuLogin,
+        }
+      })
+
+      setSugestoes(resultado)
+      setGerado(true)
+    } catch(e) { alert('Erro ao gerar sugestão.') }
+    setLoading(false)
+  }
+
+  async function confirmar() {
+    setSalvando(true)
+    const payload = sugestoes.map(({ _key, editando, ...s }) => s)
+    await onSalvar(payload)
+    setSalvando(false)
+    onClose()
+  }
+
+  const nomeEx = (n: string) => { const p = n.trim().split(' ').filter(Boolean); return p.length <= 1 ? n : p[0]+' '+p[p.length-1] }
+
+  return (
+    <div className="fixed inset-0 z-[280] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
+        <div className="bg-gradient-to-r from-violet-600 to-purple-700 p-5 text-white flex justify-between items-start flex-shrink-0">
+          <div>
+            <h3 className="text-base font-black">💡 Sugestão de Distribuição</h3>
+            <p className="text-xs text-white/60 mt-0.5">Peso semanal primeiro · Total como desempate</p>
+          </div>
+          <button onClick={onClose} className="text-white/60 hover:text-white text-xl">✕</button>
+        </div>
+
+        <div className="p-5 overflow-y-auto flex-1 flex flex-col gap-4">
+          {/* Seletor escopo */}
+          <div className="flex gap-3 items-center flex-wrap">
+            <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
+              {(['semana','dia'] as const).map(e => (
+                <button key={e} onClick={() => setEscopo(e)}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${escopo===e?'bg-white shadow text-violet-600':'text-gray-500 hover:text-gray-700'}`}>
+                  {e==='semana'?'📆 Semana':'📅 Dia'}
+                </button>
+              ))}
+            </div>
+            {escopo==='dia' && (
+              <input type="date" value={dataAlvo} onChange={e => setDataAlvo(e.target.value)}
+                className="border border-gray-200 rounded-xl px-3 py-1.5 text-sm font-bold outline-none focus:ring-2 focus:ring-violet-400" />
+            )}
+            {escopo==='semana' && (
+              <span className="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1.5 rounded-xl">
+                {weekDays[0]?.toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})} – {weekDays[4]?.toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'})}
+              </span>
+            )}
+            <button onClick={gerarSugestao} disabled={loading}
+              className="ml-auto bg-violet-600 hover:bg-violet-700 text-white font-black px-5 py-2 rounded-xl text-sm disabled:opacity-50 flex items-center gap-2">
+              {loading ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin inline-block"/>Gerando...</> : '✨ Gerar Sugestão'}
+            </button>
+          </div>
+
+          {/* Preview */}
+          {gerado && sugestoes.length === 0 && (
+            <p className="text-center text-gray-400 py-8 text-sm">Nenhuma sessão encontrada para o período selecionado.</p>
+          )}
+
+          {gerado && sugestoes.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-black text-gray-500 uppercase tracking-wide">{sugestoes.length} sessão(ões) sugerida(s)</p>
+                <button onClick={() => {
+                  const ini = escopo==='dia' ? dataAlvo : weekStart
+                  const fim = escopo==='dia' ? dataAlvo : weekEndSun
+                  setSugestoes(prev => [...prev, {
+                    _key: `new_${Date.now()}`,
+                    data: ini, nome_sessao: '', modalidade: 'PRESENCIAL',
+                    horario: '13:30', plenario: '', descricao: '', consultores: [], criado_por: meuLogin,
+                  }])
+                  setEditIdx(sugestoes.length)
+                }} className="text-xs font-bold text-violet-600 bg-violet-50 border border-violet-200 px-3 py-1.5 rounded-lg hover:bg-violet-100">
+                  ➕ Adicionar sessão
+                </button>
+              </div>
+
+              {sugestoes.map((s, i) => (
+                <div key={s._key} className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+                  {editIdx === i ? (
+                    <div className="flex flex-col gap-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] font-black text-gray-400 uppercase">Data</label>
+                          <input type="date" value={s.data}
+                            onChange={e => setSugestoes(prev => prev.map((x,j) => j===i ? {...x,data:e.target.value} : x))}
+                            className="w-full border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold outline-none focus:ring-2 focus:ring-violet-400 mt-1"/>
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black text-gray-400 uppercase">Horário</label>
+                          <input type="time" value={s.horario||''}
+                            onChange={e => setSugestoes(prev => prev.map((x,j) => j===i ? {...x,horario:e.target.value} : x))}
+                            className="w-full border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold outline-none focus:ring-2 focus:ring-violet-400 mt-1"/>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black text-gray-400 uppercase">Nome da Sessão</label>
+                        <input type="text" value={s.nome_sessao}
+                          onChange={e => setSugestoes(prev => prev.map((x,j) => j===i ? {...x,nome_sessao:e.target.value.toUpperCase()} : x))}
+                          className="w-full border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold outline-none focus:ring-2 focus:ring-violet-400 mt-1"/>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black text-gray-400 uppercase">Consultor</label>
+                        <select value={s.consultores[0]||''}
+                          onChange={e => setSugestoes(prev => prev.map((x,j) => j===i ? {...x,consultores:e.target.value?[e.target.value]:[]} : x))}
+                          className="w-full border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold outline-none focus:ring-2 focus:ring-violet-400 mt-1 bg-white">
+                          <option value="">— nenhum —</option>
+                          {CONS_LISTA.map(c => <option key={c} value={c}>{nomeEx(c)}</option>)}
+                        </select>
+                      </div>
+                      <button onClick={() => setEditIdx(null)}
+                        className="text-xs font-bold bg-violet-600 text-white py-1.5 rounded-lg hover:bg-violet-700">✓ Confirmar</button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-black text-violet-800 truncate">{s.nome_sessao||'(nova sessão)'}</p>
+                        <div className="flex gap-2 text-[10px] text-gray-400 mt-0.5">
+                          <span>{new Date(s.data+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'})}</span>
+                          {s.horario && <span>🕐 {s.horario}</span>}
+                          {s.plenario && <span>Pl. {s.plenario}</span>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {s.consultores.length > 0
+                          ? <span className="text-xs font-bold px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full">{nomeEx(s.consultores[0])}</span>
+                          : <span className="text-xs text-gray-300 italic">sem consultor</span>
+                        }
+                        <button onClick={() => setEditIdx(i)} className="w-6 h-6 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-xs hover:bg-violet-50" title="Editar">✏️</button>
+                        <button onClick={() => setSugestoes(prev => prev.filter((_,j) => j!==i))} className="w-6 h-6 rounded-lg bg-red-50 border border-red-200 flex items-center justify-center text-xs text-red-500 hover:bg-red-100" title="Remover">✕</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {gerado && sugestoes.length > 0 && (
+          <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0">
+            <button onClick={confirmar} disabled={salvando}
+              className="flex-[2] bg-violet-600 hover:bg-violet-700 text-white font-black py-3 rounded-xl disabled:opacity-50 flex items-center justify-center gap-2">
+              {salvando ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin"/>Salvando...</> : `💾 Confirmar (${sugestoes.length} sessões)`}
+            </button>
+            <button onClick={onClose} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-3 rounded-xl">Cancelar</button>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -307,6 +600,11 @@ export function PainelGestaoSessoes(){
   const[semanaOffset,setSemanaOffset]=useState(0)
   const[modal,setModal]=useState<{data:string;item?:AgendaDetalhe}|null>(null)
   const[filtroConsultor,setFiltroConsultor]=useState('Todos')
+  const[quickNome,setQuickNome]=useState<Record<string,string>>({})
+  const[quickSaving,setQuickSaving]=useState<string|null>(null)
+  const[reativarModal,setReativarModal]=useState<AgendaDetalhe|null>(null)
+  const[dataReativacao,setDataReativacao]=useState('')
+  const[modalSugestao,setModalSugestao]=useState(false)
 
   // Apenas Brenda e Farley podem editar
   const canEdit = meuLogin==='Brenda' || meuLogin==='Farley'
@@ -351,16 +649,31 @@ export function PainelGestaoSessoes(){
     setLoading(false)
   }
 
-  async function handleSalvar(payload:Omit<AgendaDetalhe,'criado_em'>&{id?:number}){
+  async function handleSalvar(payload:Omit<AgendaDetalhe,'criado_em'>&{id?:string}){
     const{id,...basePayload}=payload
+
+    // Busca nome disponível: verifica se data+nome já existe (excluindo o próprio registro)
+    async function nomeDisponivel(nome: string): Promise<string> {
+      let tentativa = 0
+      while (tentativa < 10) {
+        const nomeTentativa = tentativa === 0 ? nome : `${nome} (${tentativa + 1})`
+        let query = supabase.from('agenda_detalhes')
+          .select('id').eq('data', basePayload.data).eq('nome_sessao', nomeTentativa)
+        if (id) query = query.neq('id', id)  // exclui o próprio na edição
+        const { data: existe } = await query.maybeSingle()
+        if (!existe) return nomeTentativa  // nome livre
+        tentativa++
+      }
+      return `${nome} (${Date.now()})`  // fallback
+    }
+
+    const nomeOk = await nomeDisponivel(basePayload.nome_sessao)
+    basePayload.nome_sessao = nomeOk
+
     if(id){
-      // Edição: atualiza pelo ID — evita colisão de constraint
       await supabase.from('agenda_detalhes').update(basePayload).eq('id',id)
     } else {
-      // Novo: upsert para evitar duplicata
-      await supabase.from('agenda_detalhes')
-        .upsert({...basePayload,criado_em:new Date().toISOString()},
-          {onConflict:'data,nome_sessao',ignoreDuplicates:false})
+      await supabase.from('agenda_detalhes').insert({...basePayload, criado_em: new Date().toISOString()})
     }
     const dataBR=new Date(basePayload.data+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'})
     const msg=`📅 ${id?'Atualizada':'Nova sessão'}: ${basePayload.nome_sessao} — ${dataBR}${basePayload.horario?' às '+basePayload.horario:''}${basePayload.plenario?' · Pl.'+basePayload.plenario:''} · ${basePayload.consultores.map(c=>c.split(' ')[0]).join(', ')||'sem consultor'}`
@@ -389,24 +702,69 @@ export function PainelGestaoSessoes(){
     await load()
   }
 
+  async function handleQuickAdd(dateStr: string) {
+    const nome = (quickNome[dateStr] || '').trim().toUpperCase()
+    if (!nome) return
+    setQuickSaving(dateStr)
+    // Verifica disponibilidade do nome
+    let nomeOk = nome
+    for (let t = 1; t < 10; t++) {
+      const { data: existe } = await supabase.from('agenda_detalhes')
+        .select('id').eq('data', dateStr).eq('nome_sessao', nomeOk).maybeSingle()
+      if (!existe) break
+      nomeOk = `${nome} (${t + 1})`
+    }
+    const { error } = await supabase.from('agenda_detalhes').insert({
+      data: dateStr, nome_sessao: nomeOk,
+      modalidade: MODALIDADE_PADRAO(nomeOk),
+      consultores: [], criado_por: meuLogin!, criado_em: new Date().toISOString()
+    })
+    if (!error) {
+      setQuickNome(p => ({ ...p, [dateStr]: '' }))
+      adicionarMensagemMural(`📅 Nova sessão: ${nomeOk} — ${new Date(dateStr+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}`, 'comum', meuLogin!)
+    }
+    setQuickSaving(null)
+    await load()
+  }
+
+  async function handleSuspenderSessao(item: AgendaDetalhe) {
+    if (!confirm(`Suspender "${item.nome_sessao}"?`)) return
+    await supabase.from('agenda_detalhes').update({ suspenso: true }).eq('id', item.id)
+    await load()
+  }
+
+  async function handleReativarSessao() {
+    if (!reativarModal || !dataReativacao) return alert('Informe a data!')
+    await supabase.from('agenda_detalhes')
+      .update({ suspenso: false, data: dataReativacao }).eq('id', reativarModal.id)
+    setReativarModal(null); setDataReativacao('')
+    await load()
+  }
+
   async function copiarSemanaAnterior(){
     setCopiando(true)
     const semAntStart=fmtLocal(new Date(new Date(monday).setDate(monday.getDate()-7)))
     const semAntEnd=fmtLocal(new Date(new Date(monday).setDate(monday.getDate()-1)))
     const{data:anterior}=await supabase.from('agenda_detalhes').select('*').gte('data',semAntStart).lte('data',semAntEnd)
     if(!anterior?.length){alert('Nenhuma sessão na semana anterior.');setCopiando(false);return}
-    const novos:any[]=[]
+    let copiados=0
     for(const old of anterior){
       const dw=new Date(old.data+'T12:00:00').getDay()
       const novaData=fmtLocal(weekDays[dw-1])
-      if(!itens.some(i=>i.data===novaData&&i.nome_sessao===old.nome_sessao))
-        novos.push({data:novaData,nome_sessao:old.nome_sessao,modalidade:old.modalidade,horario:old.horario,
-          plenario:old.plenario,descricao:old.descricao,pauta:old.pauta,mesa:old.mesa,
-          consultores:old.consultores,criado_por:meuLogin!,criado_em:new Date().toISOString()})
+      const base={data:novaData,modalidade:old.modalidade,horario:old.horario,
+        plenario:old.plenario,descricao:old.descricao,pauta:old.pauta,mesa:old.mesa,
+        setor:old.setor,consultores:old.consultores,criado_por:meuLogin!,criado_em:new Date().toISOString()}
+      let tentativa=0
+      while(tentativa<10){
+        const nome=tentativa===0?old.nome_sessao:`${old.nome_sessao} (${tentativa+1})`
+        const{error}=await supabase.from('agenda_detalhes').insert({...base,nome_sessao:nome})
+        if(!error){copiados++;break}
+        if(!isDuplicate(error))break
+        tentativa++
+      }
     }
-    if(novos.length>0){
-      await supabase.from('agenda_detalhes').insert(novos)
-      adicionarMensagemMural(`📅 ${novos.length} sessões copiadas para a semana de ${weekDays[0].toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}`, 'comum', meuLogin!)
+    if(copiados>0){
+      adicionarMensagemMural(`📅 ${copiados} sessões copiadas para a semana de ${weekDays[0].toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}`, 'comum', meuLogin!)
     } else alert('Todas as sessões já estão na semana atual.')
     await load();setCopiando(false)
   }
@@ -489,6 +847,10 @@ export function PainelGestaoSessoes(){
                   className="bg-white/20 hover:bg-white/30 text-white font-bold px-3 py-1.5 rounded-xl text-xs disabled:opacity-50 flex items-center gap-1.5">
                   {copiando?'⏳':'📋'} Copiar sem. ant.
                 </button>
+                <button onClick={()=>setModalSugestao(true)}
+                  className="bg-yellow-400 hover:bg-yellow-300 text-yellow-900 font-black px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5">
+                  💡 Sugestão
+                </button>
                 <button onClick={()=>setModal({data:fmtLocal(new Date())})}
                   className="bg-white text-violet-700 hover:bg-violet-50 font-black px-3 py-1.5 rounded-xl text-xs">
                   + Sessão
@@ -524,7 +886,7 @@ export function PainelGestaoSessoes(){
             {weekDays.map(d=>{
               const dateStr=fmtLocal(d)
               const isToday=dateStr===fmtLocal(new Date())
-              const sessDia=itensPorDia[dateStr]??[]
+              const sessDia=itensPorDia[dateStr]?.filter(i=>!i.suspenso)??[]
               const atvsNSdia=(atvsNaoSessao[dateStr]||[]).filter(a=>!a.atividade.toLowerCase().includes('atendimento pres'))
 
               return(
@@ -559,10 +921,36 @@ export function PainelGestaoSessoes(){
                       {sessDia.map(it=>(
                         <CardSessao key={it.id} item={it} canEdit={canEdit}
                           onEdit={()=>setModal({data:it.data,item:it})}
-                          onDelete={()=>handleDeletar(it)}/>
+                          onDelete={()=>handleDeletar(it)}
+                          onSuspend={()=>handleSuspenderSessao(it)}/>
                       ))}
                     </div>
                   }
+
+                  {/* Quick-add inline */}
+                  {canEdit&&(
+                    <div className="flex gap-2 mb-3">
+                      <input
+                        type="text"
+                        value={quickNome[dateStr]||''}
+                        onChange={e=>setQuickNome(p=>({...p,[dateStr]:e.target.value}))}
+                        onKeyDown={e=>e.key==='Enter'&&handleQuickAdd(dateStr)}
+                        placeholder="+ Digitar sessão e Enter..."
+                        className="flex-1 border border-violet-200 rounded-xl px-3 py-1.5 text-xs font-bold outline-none focus:ring-2 focus:ring-violet-400 bg-violet-50 placeholder:text-violet-300"
+                        list={`sessoes-${dateStr}`}
+                      />
+                      <datalist id={`sessoes-${dateStr}`}>
+                        {SESSOES_CATALOGO.map(s=><option key={s} value={s}/>)}
+                      </datalist>
+                      <button
+                        disabled={!quickNome[dateStr]?.trim()||quickSaving===dateStr}
+                        onClick={()=>handleQuickAdd(dateStr)}
+                        className="bg-violet-600 hover:bg-violet-700 text-white font-black px-3 py-1.5 rounded-xl text-xs disabled:opacity-40 transition-all"
+                      >
+                        {quickSaving===dateStr?'⏳':'✓'}
+                      </button>
+                    </div>
+                  )}
 
                   {/* Atividades não-sessão */}
                   {atvsNSdia.length>0&&(
@@ -583,6 +971,24 @@ export function PainelGestaoSessoes(){
             })}
           </div>
         }
+
+        {/* Sessões suspensas */}
+        {canEdit && itens.some(i=>i.suspenso) && (
+          <div className="border-t border-gray-100 px-5 py-4">
+            <p className="text-xs font-black text-yellow-600 uppercase tracking-wide mb-3">⏸️ Sessões suspensas</p>
+            <div className="flex flex-wrap gap-2">
+              {itens.filter(i=>i.suspenso).map(it=>(
+                <div key={it.id} className="flex items-center gap-2 bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2">
+                  <span className="text-xs font-bold text-yellow-800">{it.nome_sessao}</span>
+                  <button onClick={()=>{setReativarModal(it);setDataReativacao(fmtLocal(new Date()))}}
+                    className="text-[10px] bg-green-100 hover:bg-green-200 text-green-700 font-bold px-2 py-0.5 rounded-lg">
+                    ▶ Reativar
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {modal&&(
@@ -593,6 +999,51 @@ export function PainelGestaoSessoes(){
           onClose={()=>setModal(null)}
           meuLogin={meuLogin!}
         />
+      )}
+
+      {modalSugestao&&(
+        <ModalSugestao
+          meuLogin={meuLogin!}
+          weekDays={weekDays}
+          weekStart={weekStart}
+          weekEndSun={weekEndSun}
+          onClose={()=>setModalSugestao(false)}
+          onSalvar={async (sessoes)=>{
+            for(const s of sessoes){
+              const{criado_por,...rest}=s
+              await supabase.from('agenda_detalhes').insert({
+                ...rest,criado_por,criado_em:new Date().toISOString()
+              })
+            }
+            adicionarMensagemMural(`💡 ${sessoes.length} sessões distribuídas via Sugestão`,'comum',meuLogin!)
+            await load()
+          }}
+        />
+      )}
+
+      {/* Modal reativar sessão */}
+      {reativarModal&&(
+        <div className="fixed inset-0 z-[300] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={()=>setReativarModal(null)}>
+          <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6"
+            onClick={e=>e.stopPropagation()}>
+            <h3 className="text-base font-black text-gray-800 mb-1">▶ Reativar sessão</h3>
+            <p className="text-sm text-violet-600 font-bold mb-4">{reativarModal.nome_sessao}</p>
+            <label className="block text-xs font-black text-gray-400 uppercase mb-1">Data de reativação</label>
+            <input type="date" value={dataReativacao} onChange={e=>setDataReativacao(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-violet-400 mb-4"/>
+            <div className="flex gap-2">
+              <button disabled={!dataReativacao} onClick={handleReativarSessao}
+                className="flex-1 bg-violet-600 hover:bg-violet-700 text-white font-black py-2.5 rounded-xl disabled:opacity-50">
+                ▶ Reativar
+              </button>
+              <button onClick={()=>setReativarModal(null)}
+                className="flex-1 bg-gray-100 text-gray-600 font-bold py-2.5 rounded-xl hover:bg-gray-200">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   )

@@ -1,8 +1,8 @@
 export const EQUIPE_EPROC = [
-  "Barbara Mara", "Bruno Glaicon", "Claudia Luiza", "Douglas Paiva", "Fábio Alves",
-  "Glayce Torres", "Isabela Dias", "Isac Candido", "Ivana Guimarães", "Jonatas", "Leonardo Damaceno",
-  "Marcelo Pena Guerra", "Michael Douglas", "Morôni", "Pablo Mol", "Ranyer Segal",
-  "Sarah Leal", "Victoria Lisboa"
+  "Barbara Mara", "Bruno Glaicon", "Douglas Paiva", "Fábio Alves",
+  "Glayce Torres", "Isabela Dias", "Isac Candido", "Ivana Guimarães", "Jonatas", "Larissa",
+  "Leonardo Damaceno", "Marcelo Pena Guerra", "Michael Douglas", "Morôni", "Pablo Mol",
+  "Ranyer Segal", "Sarah Leal", "Victoria Lisboa"
 ].sort();
 
 export const EQUIPE_JPE = [
@@ -26,7 +26,7 @@ export const RAMAIS: Record<string, string> = {
 // ========================
 export interface UsuarioSistema {
   nome: string;
-  perfil: 'Gestor' | 'Secretaria' | 'Consultor';
+  perfil: 'Gestor' | 'Secretaria' | 'Consultor' | 'Projetos';
   equipe: 'Gestão' | 'Projetos' | 'Secretaria' | 'Eproc' | 'Legados';
 }
 
@@ -35,10 +35,9 @@ export const USUARIOS_SISTEMA: UsuarioSistema[] = [
   { nome: 'Matheus', perfil: 'Gestor', equipe: 'Gestão' },
   { nome: 'Gilberto', perfil: 'Gestor', equipe: 'Gestão' },
   // Projetos
-  { nome: 'Juliana', perfil: 'Gestor', equipe: 'Projetos' },
+  { nome: 'Juliana', perfil: 'Projetos', equipe: 'Projetos' },
   // Secretaria Cesupe
   { nome: 'Brenda', perfil: 'Secretaria', equipe: 'Secretaria' },
-  { nome: 'Larissa', perfil: 'Secretaria', equipe: 'Secretaria' },
   { nome: 'Lívia', perfil: 'Secretaria', equipe: 'Secretaria' },
   // Consultores EPROC
   ...EQUIPE_EPROC.map(nome => ({ nome, perfil: 'Consultor' as const, equipe: 'Eproc' as const })),

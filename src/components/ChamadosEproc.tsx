@@ -44,7 +44,7 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 const EPROC_CONSULTORES = [
-  'Barbara Mara','Bruno Glaicon','Claudia Luiza','Douglas Paiva','Fábio Alves',
+  'Barbara Mara','Bruno Glaicon','Douglas Paiva','Fábio Alves',
   'Glayce Torres','Isabela Dias','Isac Candido','Ivana Guimarães','Jonatas',
   'Leonardo Damaceno','Marcelo Pena Guerra','Michael Douglas','Morôni',
   'Pablo Mol','Ranyer Segal','Sarah Leal','Victoria Lisboa',

@@ -92,7 +92,7 @@ export function BannerAnomalia() {
           .ticker-track {
             display: inline-flex;
             white-space: nowrap;
-            animation: ticker ${Math.max(18, abertas.length * 12)}s linear infinite;
+            animation: ticker ${Math.max(60, abertas.length * 40)}s linear infinite;
           }
           .ticker-track:hover { animation-play-state: paused; }
         `}</style>

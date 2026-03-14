@@ -11,6 +11,13 @@ function nomeExibicao(nome: string): string {
 
 
 
+// Detecta erro de constraint única do Postgres/Supabase em qualquer formato
+const isDuplicate = (e: any) =>
+  e?.code === '23505' || e?.code === '409' ||
+  String(e?.message).toLowerCase().includes('duplicate') ||
+  String(e?.message).toLowerCase().includes('unique') ||
+  String(e?.details).toLowerCase().includes('already exists')
+
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface AgendaAtividade {
   id: string
@@ -20,6 +27,8 @@ interface AgendaAtividade {
   consultores: string[]
   criado_por: string
   criado_em: string
+  suspenso?: boolean
+  data_reativacao?: string | null
 }
 
 // ─── Catálogo de atividades ───────────────────────────────────────────────────
@@ -82,8 +91,8 @@ function fmtLocal(d: Date) {
 const DIAS_PT: Record<number,string> = {1:'Segunda-feira',2:'Terça-feira',3:'Quarta-feira',4:'Quinta-feira',5:'Sexta-feira'}
 
 // ─── Card de atividade ────────────────────────────────────────────────────────
-function CardAtividade({ item, canEdit, onEdit, onDelete, modoExcluir, selecionado, onToggleSel }: {
-  item: AgendaAtividade; canEdit: boolean; onEdit: () => void; onDelete: () => void
+function CardAtividade({ item, canEdit, canSuspend, onEdit, onDelete, onSuspend, modoExcluir, selecionado, onToggleSel }: {
+  item: AgendaAtividade; canEdit: boolean; canSuspend?: boolean; onEdit: () => void; onDelete: () => void; onSuspend: () => void
   modoExcluir?: boolean; selecionado?: boolean; onToggleSel?: () => void
 }) {
   const cfg = getCfg(item.tipo)
@@ -103,6 +112,7 @@ function CardAtividade({ item, canEdit, onEdit, onDelete, modoExcluir, seleciona
         {canEdit && !modoExcluir && (
           <div className="flex gap-1 flex-shrink-0">
             <button onClick={onEdit} className="w-6 h-6 rounded-lg bg-white/70 hover:bg-white border border-gray-200 flex items-center justify-center text-xs" title="Editar">✏️</button>
+            {canSuspend && <button onClick={onSuspend} className="w-6 h-6 rounded-lg bg-yellow-50 hover:bg-yellow-100 border border-yellow-200 flex items-center justify-center text-xs" title="Suspender">⏸️</button>}
             <button onClick={onDelete} className="w-6 h-6 rounded-lg bg-red-50 hover:bg-red-100 border border-red-200 flex items-center justify-center text-xs text-red-500" title="Excluir">✕</button>
           </div>
         )}
@@ -129,7 +139,7 @@ const DIAS_SEMANA = ['Seg','Ter','Qua','Qui','Sex']
 
 function ModalAtividade({ data, item, onSave, onClose, meuLogin }: {
   data: string; item?: AgendaAtividade
-  onSave: (p: Omit<AgendaAtividade,'criado_em'> & { id?: number; datasExtras?: string[] }) => void
+  onSave: (p: Omit<AgendaAtividade,'criado_em'> & { id?: string; datasExtras?: string[] }) => void
   onClose: () => void; meuLogin: string
 }) {
   const isNew = !item
@@ -300,6 +310,9 @@ export function PainelGestaoAtividades() {
   const [filtroConsultor,setFiltroConsultor]= useState('Todos')
   const [modoExcluir,    setModoExcluir]    = useState(false)
   const [selecionados,   setSelecionados]   = useState<number[]>([])
+  const [verSuspensas,   setVerSuspensas]   = useState(false)
+  const [reativarModal,  setReativarModal]  = useState<AgendaAtividade|null>(null)
+  const [dataReativacao, setDataReativacao] = useState('')
 
   const monday   = useMemo(()=>{const m=getMonday(new Date());m.setDate(m.getDate()+semanaOffset*7);return m},[semanaOffset])
   const weekDays = useMemo(()=>getWeekDays(monday),[monday])
@@ -317,24 +330,38 @@ export function PainelGestaoAtividades() {
     setLoading(false)
   }
 
-  async function handleSalvar(payload: Omit<AgendaAtividade,'criado_em'> & { id?: number; datasExtras?: string[] }) {
+  async function handleSalvar(payload: Omit<AgendaAtividade,'criado_em'> & { id?: string; datasExtras?: string[] }) {
     const { id, datasExtras, ...basePayload } = payload
 
+    // Pré-verifica nome disponível para uma data específica
+    async function tipoDisponivel(data: string, tipo: string, excluirId?: string): Promise<string> {
+      let tentativa = 0
+      while (tentativa < 10) {
+        const tipoTentativa = tentativa === 0 ? tipo : `${tipo} (${tentativa + 1})`
+        let query = supabase.from('agenda_atividades')
+          .select('id').eq('data', data).eq('tipo', tipoTentativa)
+        if (excluirId) query = query.neq('id', excluirId)
+        const { data: existe } = await query.maybeSingle()
+        if (!existe) return tipoTentativa
+        tentativa++
+      }
+      return `${tipo} (${Date.now()})`
+    }
+
     if (id) {
-      // Edição: atualiza diretamente pelo ID — evita colisão de constraint
-      await supabase.from('agenda_atividades').update(basePayload).eq('id', id)
+      const tipoOk = await tipoDisponivel(basePayload.data, basePayload.tipo, id)
+      await supabase.from('agenda_atividades').update({...basePayload, tipo: tipoOk}).eq('id', id)
+      basePayload.tipo = tipoOk
     } else {
-      // Novo: upsert para evitar duplicata (atualiza se data+tipo já existir)
-      await supabase.from('agenda_atividades')
-        .upsert({ ...basePayload, criado_em: new Date().toISOString() },
-          { onConflict: 'data,tipo', ignoreDuplicates: false })
+      const tipoOk = await tipoDisponivel(basePayload.data, basePayload.tipo)
+      await supabase.from('agenda_atividades').insert({ ...basePayload, tipo: tipoOk, criado_em: new Date().toISOString() })
+      basePayload.tipo = tipoOk
       // Repetição em múltiplos dias
       if (datasExtras && datasExtras.length > 0) {
-        const extras = datasExtras.map(d => ({
-          ...basePayload, data: d, criado_em: new Date().toISOString()
-        }))
-        await supabase.from('agenda_atividades')
-          .upsert(extras, { onConflict: 'data,tipo', ignoreDuplicates: true })
+        for (const d of datasExtras) {
+          const tt = await tipoDisponivel(d, basePayload.tipo)
+          await supabase.from('agenda_atividades').insert({ ...basePayload, data: d, tipo: tt, criado_em: new Date().toISOString() })
+        }
       }
     }
 
@@ -349,6 +376,24 @@ export function PainelGestaoAtividades() {
   async function handleDeletar(item: AgendaAtividade) {
     if (!confirm(`Remover "${item.tipo}"?`)) return
     await supabase.from('agenda_atividades').delete().eq('id', item.id)
+    await load()
+  }
+
+  async function handleSuspender(item: AgendaAtividade) {
+    await supabase.from('agenda_atividades')
+      .update({ suspenso: true, data_reativacao: null })
+      .eq('id', item.id)
+    await load()
+  }
+
+  async function handleReativar() {
+    if (!reativarModal) return
+    if (!dataReativacao) return alert('Informe a data de reativação!')
+    await supabase.from('agenda_atividades')
+      .update({ suspenso: false, data: dataReativacao, data_reativacao: null })
+      .eq('id', reativarModal.id)
+    setReativarModal(null)
+    setDataReativacao('')
     await load()
   }
 
@@ -390,12 +435,17 @@ export function PainelGestaoAtividades() {
     const map: Record<string,AgendaAtividade[]> = {}
     for (const d of weekDays) map[fmtLocal(d)] = []
     for (const it of itens) {
+      if (it.suspenso) continue  // não mostra suspensas na semana
       if (!map[it.data]) continue
       const ok = filtroConsultor==='Todos' || it.consultores.includes(filtroConsultor) || (filtroConsultor==='Minhas' && it.consultores.includes(meuLogin||''))
       if (ok) map[it.data].push(it)
     }
     return map
   },[itens,weekDays,filtroConsultor,meuLogin])
+
+  const itensSuspensos = useMemo(()=>
+    itens.filter(it => it.suspenso)
+  ,[itens])
 
   if (!aberto) return (
     <button onClick={()=>setAberto(true)}
@@ -488,7 +538,9 @@ export function PainelGestaoAtividades() {
                       : <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
                           {atvsDia.map(it => (
                             <CardAtividade key={it.id} item={it} canEdit={true}
+                              canSuspend={meuLogin === 'Brenda' || meuLogin === 'Farley'}
                               onEdit={()=>setModal({data:it.data,item:it})}
+                              onSuspend={()=>handleSuspender(it)}
                               onDelete={()=>handleDeletar(it)}
                               modoExcluir={modoExcluir}
                               selecionado={selecionados.includes(it.id)}
@@ -503,6 +555,41 @@ export function PainelGestaoAtividades() {
         }
       </div>
 
+      {/* ── Seção Suspensas ── */}
+      {itensSuspensos.length > 0 && (
+        <div className="border border-yellow-200 rounded-2xl overflow-hidden mt-2">
+          <button
+            onClick={() => setVerSuspensas(v => !v)}
+            className="w-full flex items-center justify-between px-5 py-3 bg-yellow-50 hover:bg-yellow-100 transition-colors text-left"
+          >
+            <span className="text-sm font-black text-yellow-700">⏸️ Atividades suspensas ({itensSuspensos.length})</span>
+            <span className="text-yellow-500">{verSuspensas ? '▲' : '▼'}</span>
+          </button>
+          {verSuspensas && (
+            <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+              {itensSuspensos.map(it => {
+                const cfg = getCfg(it.tipo)
+                return (
+                  <div key={it.id} className={`border-2 rounded-2xl p-3 opacity-60 ${cfg.bg} ${cfg.border}`}>
+                    <p className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${cfg.badge} mb-1 inline-block`}>{cfg.icon} {it.tipo}</p>
+                    <p className="text-[10px] text-gray-500 mb-2">📅 Suspensa em {new Date(it.data+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}</p>
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {it.consultores.map(c => <span key={c} className="text-[10px] font-bold px-1 rounded bg-white/70">{c.split(' ')[0]}</span>)}
+                    </div>
+                    <button
+                      onClick={() => { setReativarModal(it); setDataReativacao('') }}
+                      className="w-full text-[10px] font-black bg-green-500 hover:bg-green-600 text-white py-1.5 rounded-xl transition-colors"
+                    >
+                      ▶️ Reativar
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {modal && (
         <ModalAtividade
           data={modal.data}
@@ -511,6 +598,31 @@ export function PainelGestaoAtividades() {
           onClose={()=>setModal(null)}
           meuLogin={meuLogin!}
         />
+      )}
+
+      {/* ── Modal Reativar ── */}
+      {reativarModal && (
+        <div className="fixed inset-0 z-[300] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setReativarModal(null)}>
+          <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6"
+            onClick={e => e.stopPropagation()}>
+            <h3 className="text-base font-black text-gray-800 mb-1">▶️ Reativar atividade</h3>
+            <p className="text-sm text-gray-500 mb-4">{reativarModal.tipo}</p>
+            <label className="block text-xs font-black text-gray-400 uppercase mb-1">Escolha a nova data</label>
+            <input type="date" value={dataReativacao} onChange={e => setDataReativacao(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-green-400 mb-4" />
+            <div className="flex gap-2">
+              <button onClick={handleReativar} disabled={!dataReativacao}
+                className="flex-1 bg-green-500 hover:bg-green-600 text-white font-black py-3 rounded-xl disabled:opacity-50">
+                ▶️ Reativar
+              </button>
+              <button onClick={() => setReativarModal(null)}
+                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-3 rounded-xl">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   )

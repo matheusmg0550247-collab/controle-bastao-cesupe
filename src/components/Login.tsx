@@ -9,7 +9,7 @@ export function Login() {
 
   // Identifica se a pessoa tem acesso restrito (Tanto Gestão quanto Projetos têm o perfil Gestor no nosso sistema)
   const userObj = USUARIOS_SISTEMA.find(u => u.nome === nomeSelecionado);
-  const isRestrito = userObj?.perfil === 'Gestor';
+  const isRestrito = userObj?.perfil === 'Gestor' && userObj?.equipe !== 'Projetos';
 
   const handleEntrar = (e: React.FormEvent) => {
     e.preventDefault();

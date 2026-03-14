@@ -21,6 +21,7 @@ import { ModalAtividadePresencial } from './components/ModalAtividadePresencial'
 import { MeusAtendimentos } from './components/MeusAtendimentos'
 import { BaseRespostas } from './components/BaseRespostas'
 import { ChamadosEproc } from './components/ChamadosEproc'
+import { PainelProjetos } from './components/PainelProjetos'
 import { useBastaoStore } from './store/useBastaoStore'
 import { USUARIOS_SISTEMA, getRamal } from './constants'
 
@@ -60,7 +61,36 @@ function App() {
   if (!meuLogin) return <Login />
 
   const usuarioLogado = USUARIOS_SISTEMA.find(u => u.nome === meuLogin)
-  const isGestor = usuarioLogado?.perfil === 'Gestor'
+  const isGestor   = usuarioLogado?.perfil === 'Gestor'
+  const isProjetos = usuarioLogado?.perfil === 'Projetos'
+
+  // ── Layout Projetos ─────────────────────────────────────────────────────
+  if (isProjetos) {
+    return (
+      <div className="min-h-screen bg-gray-50 font-sans text-gray-800">
+        <BannerAnomalia />
+        <div className="max-w-[1850px] mx-auto pt-2 pb-8">
+          <Header />
+          <main className="px-4 flex flex-col gap-6">
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+              <div className="xl:col-span-2 flex flex-col gap-6">
+                <PainelBastao />
+                <PainelMural />
+              </div>
+              <div className="xl:col-span-1 flex flex-col gap-6">
+                <BotaoAnomalia />
+                <BotaoDicasDiarias />
+                <BotaoCarometro />
+                <PainelFerramentas />
+              </div>
+            </div>
+            <PainelProjetos canEdit={true} />
+          </main>
+        </div>
+        <ModalAtividadePresencial />
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-800">
@@ -107,8 +137,9 @@ function App() {
             )}
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-              <div className="xl:col-span-2">
+              <div className="xl:col-span-2 flex flex-col gap-6">
                 <PainelBastao />
+                <PainelMural />
               </div>
               <div className="xl:col-span-1 flex flex-col gap-6">
                 <PainelEquipe />
